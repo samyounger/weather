@@ -168,12 +168,18 @@ Resources:
             Type: "string"
           - Name: "hour"
             Type: "string"
-  LambdaFunctionUrlPermissions:
+  FunctionURLAllowPublicAccess:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunctionUrl
       FunctionName: !Ref TempestLambdaFunction
       FunctionUrlAuthType: NONE
+      Principal: "*"
+  FunctionURLInvokeAllowInvokeAction:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref TempestLambdaFunction
       Principal: "*"
   LambdaFunctionUrl:
     Type: AWS::Lambda::Url
