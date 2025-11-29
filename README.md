@@ -18,6 +18,13 @@ $ npm run start
 
 There are helper build scripts for the various stages of building, deploying, executing, and destroying the application.
 
+### AWS Authentication
+Make sure you have the AWS CLI installed and configured with appropriate credentials.
+`$ aws configure`
+
+If you are using [AWS SSO](https://aws.amazon.com/blogs/security/how-to-configure-the-aws-cli-to-use-aws-single-sign-on/), make sure to run the following command to authenticate before running the scripts:
+`$ aws sso login`
+
 ### Create aws S3 bucket
 `$ bin/01-create-bucket.sh`
 
