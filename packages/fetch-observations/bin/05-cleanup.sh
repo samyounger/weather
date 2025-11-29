@@ -7,6 +7,14 @@ has_env_vars_set "TEMPEST_STACK_NAME_FETCH"
 source "$(dirname "$0")"/helpers/is-logged-in-aws.sh
 is_logged_in_aws
 
+# Find and delete stacks in ROLLBACK_COMPLETE state
+ROLLBACK_STACKS=$(aws cloudformation list-stacks --stack-status-filter ROLLBACK_COMPLETE --query 'StackSummaries[].StackName' --output text)
+for STACK in $ROLLBACK_STACKS; do
+    echo "Deleting stack in ROLLBACK_COMPLETE: $STACK"
+    aws cloudformation delete-stack --stack-name "$STACK"
+done
+
+
 echo "Deleting stack $TEMPEST_STACK_NAME_FETCH"
 
 FUNCTION=$(aws cloudformation describe-stack-resource --stack-name "$TEMPEST_STACK_NAME_FETCH" --logical-resource-id TempestLambdaFunction --query 'StackResourceDetail.PhysicalResourceId' --output text)
