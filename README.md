@@ -58,5 +58,7 @@ The shell scripts require these environment variables:
 ```sh
 BUCKET_NAME="some-s3-bucket-name-to-nest-files-under"
 TEMPEST_STACK_NAME_STORE="the-store-application-name"
+TEMPEST_S3_BUCKET_STORE="the-store-application-s3-bucket-name"
 TEMPEST_STACK_NAME_FETCH="the-fetch-application-name"
+TEMPEST_S3_BUCKET_FETCH="the-fetch-application-s3-bucket-name"
 ```
