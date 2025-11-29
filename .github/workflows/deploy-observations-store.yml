@@ -24,10 +24,14 @@ jobs:
       - name: Install SAM CLI
         run: pip install aws-sam-cli
 
+      - name: Show repo structure
+        run: |
+          ls -R .
+
       - name: Build SAM application
         run: |
           sam build \
-            --template-file .aws-sam/build/template.yaml
+            --template-file packages/store-observations/template.yaml
 
       - name: Deploy SAM application
         run: |
