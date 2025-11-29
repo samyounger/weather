@@ -27,7 +27,9 @@ jobs:
           aws cloudformation deploy \
             --template-file packages/store-observations/template.yaml \
             --stack-name tempest-weather-store-lib \
-            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --no-fail-on-empty-changeset \
+            --debug
 
       # If you're using SAM instead, replace the step above with:
       # - name: Install SAM CLI
