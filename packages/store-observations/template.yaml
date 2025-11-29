@@ -24,7 +24,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.handler
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       CodeUri: function/.
       Description: Call the Tempest weather API for observations and store the readings in S3.
       MemorySize: 1024
@@ -45,7 +45,7 @@ Resources:
       Description: Dependencies for the Tempest weather observations STORE app.
       ContentUri: ../../lib/.
       CompatibleRuntimes:
-        - nodejs20.x
+        - nodejs24.x
   TempestWeatherSchedule:
     Type: AWS::Events::Rule
     Properties:

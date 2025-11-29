@@ -55,7 +55,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: index.handler
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       CodeUri: function/.
       Description: Read the Tempest weather observations.
       MemorySize: 1024
@@ -76,7 +76,7 @@ Resources:
       Description: Dependencies for the Tempest weather observations READ app.
       ContentUri: ../../lib/.
       CompatibleRuntimes:
-        - nodejs20.x
+        - nodejs24.x
   TempestDatabase:
     Type: AWS::Glue::Database
     Properties:
