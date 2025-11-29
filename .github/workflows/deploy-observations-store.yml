@@ -25,9 +25,7 @@ jobs:
         run: pip install aws-sam-cli
 
       - name: Build SAM application
-        run: |
-          sam build \
-            --template-file template.yaml
+        run: sam build
 
       - name: Deploy SAM application
         run: |
