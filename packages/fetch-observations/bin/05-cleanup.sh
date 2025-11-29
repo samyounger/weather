@@ -7,6 +7,16 @@ has_env_vars_set "TEMPEST_STACK_NAME_FETCH"
 source "$(dirname "$0")"/helpers/is-logged-in-aws.sh
 is_logged_in_aws
 
+BUCKETS=$(aws cloudformation describe-stack-resources \
+    --stack-name "$TEMPEST_STACK_NAME_FETCH" \
+    --query 'StackResources[?ResourceType==`AWS::S3::Bucket`].PhysicalResourceId' \
+    --output text)
+
+for BUCKET in $BUCKETS; do
+    echo "Deleting S3 bucket: $BUCKET"
+    aws s3 rb --force s3://"$BUCKET"
+done
+
 # Find and delete stacks in ROLLBACK_COMPLETE state
 ROLLBACK_STACKS=$(aws cloudformation list-stacks --stack-status-filter ROLLBACK_COMPLETE --query 'StackSummaries[].StackName' --output text)
 for STACK in $ROLLBACK_STACKS; do
