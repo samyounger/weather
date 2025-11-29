@@ -27,7 +27,7 @@ jobs:
       - name: Build SAM application
         run: |
           sam build \
-            --template-file packages/store-observations/template.yaml
+            --template-file template.yaml
 
       - name: Deploy SAM application
         run: |
