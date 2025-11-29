@@ -21,14 +21,22 @@ jobs:
           role-to-assume: arn:aws:iam::926898703023:role/GitHubTempestCfnDeployRole
           aws-region: eu-west-2
 
-      # If you're using plain CloudFormation:
-      - name: Deploy CloudFormation stack
+      - name: Install SAM CLI
+        run: pip install aws-sam-cli
+
+      - name: Build SAM application
         run: |
-          aws cloudformation deploy \
-            --template-file packages/store-observations/template.yaml \
+          sam build \
+            --template-file packages/store-observations/template.yaml
+
+      - name: Deploy SAM application
+        run: |
+          sam deploy \
+            --template-file .aws-sam/template.yaml \
             --stack-name tempest-weather-store-lib \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-            --no-fail-on-empty-changeset \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
             --debug
 
       # If you're using SAM instead, replace the step above with:
