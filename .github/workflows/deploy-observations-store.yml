@@ -36,23 +36,9 @@ jobs:
       - name: Deploy SAM application
         run: |
           sam deploy \
-            --template-file .aws-sam/template.yaml \
+            --template-file .aws-sam/build/template.yaml \
             --stack-name tempest-weather-store-lib \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --no-confirm-changeset \
-            --no-fail-on-empty-changeset
+            --no-fail-on-empty-changeset \
             --debug
-
-      # If you're using SAM instead, replace the step above with:
-      # - name: Install SAM CLI
-      #   run: pip install aws-sam-cli
-      #
-      # - name: Build & deploy with SAM
-      #   run: |
-      #     sam build \
-      #       --template template.yaml
-      #     sam deploy \
-      #       --stack-name tempest-weather-store-lib \
-      #       --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-      #       --no-confirm-changeset \
-      #       --no-fail-on-empty-changeset
