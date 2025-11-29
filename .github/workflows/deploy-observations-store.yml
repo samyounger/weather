@@ -1,0 +1,45 @@
+name: Deploy Tempest Weather Store Lib
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::926898703023:role/GitHubTempestCfnDeployRole
+          aws-region: eu-west-2
+
+      # If you're using plain CloudFormation:
+      - name: Deploy CloudFormation stack
+        run: |
+          aws cloudformation deploy \
+            --template-file packages/store-observations/template.yaml \
+            --stack-name tempest-weather-store-lib \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+
+      # If you're using SAM instead, replace the step above with:
+      # - name: Install SAM CLI
+      #   run: pip install aws-sam-cli
+      #
+      # - name: Build & deploy with SAM
+      #   run: |
+      #     sam build \
+      #       --template template.yaml
+      #     sam deploy \
+      #       --stack-name tempest-weather-store-lib \
+      #       --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+      #       --no-confirm-changeset \
+      #       --no-fail-on-empty-changeset
