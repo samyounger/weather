@@ -24,9 +24,13 @@ jobs:
       - name: Install SAM CLI
         run: pip install aws-sam-cli
 
-      - name: Show repo structure
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build store function and layer artifacts
         run: |
-          ls -R .
+          npm run build --workspace=@weather/store-observations
+          bash packages/store-observations/bin/02-build-layer.sh
 
       - name: Build SAM application
         run: |
@@ -37,6 +41,7 @@ jobs:
         working-directory: packages/store-observations
         run: |
           sam deploy \
+            --template-file template.yaml \
             --stack-name tempest-weather-store-lib \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
             --no-confirm-changeset \
