@@ -17,6 +17,7 @@ $ npm run start
 ## Deployment
 
 Deployments are managed with AWS SAM config (`samconfig.toml`) in each deployable package.
+Artifact buckets are fixed via `s3_bucket` in `samconfig.toml`, and GitHub Actions applies an S3 lifecycle policy to expire old deployment artifacts automatically.
 
 ### AWS Authentication
 Make sure you have the AWS CLI installed and configured with appropriate credentials.
