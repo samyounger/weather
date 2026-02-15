@@ -61,8 +61,9 @@ Resources:
           Id: "TargetFunctionV1"
   PermissionForEventsToInvokeLambda:
     Type: AWS::Lambda::Permission
+    DependsOn: TempestWeatherSchedule
     Properties:
       FunctionName: !Ref "TempestLambdaFunction"
       Action: "lambda:InvokeFunction"
       Principal: "events.amazonaws.com"
-      SourceArn: !GetAtt TempestWeatherSchedule.Arn
+      SourceArn: !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/${TempestWeatherSchedule}"
