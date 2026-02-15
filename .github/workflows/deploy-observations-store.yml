@@ -30,29 +30,24 @@ jobs:
           role-to-assume: arn:aws:iam::926898703023:role/GitHubTempestCfnDeployRole
           aws-region: eu-west-2
 
-      - name: Install SAM CLI
-        run: pip install aws-sam-cli
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build store function and layer artifacts
         run: |
+          npm run build --workspace=@weather/cloud-computing
           npm run build --workspace=@weather/store-observations
-          bash packages/store-observations/bin/02-build-layer.sh
+          mkdir -p lib/nodejs
+          rm -rf lib/nodejs/node_modules
+          cp -r node_modules lib/nodejs
 
       - name: Build SAM application
-        run: |
-          sam build \
-            --template-file packages/store-observations/template.yaml
+        working-directory: packages/store-observations
+        run: sam build --config-env prod
 
       - name: Deploy SAM application
         working-directory: packages/store-observations
-        run: |
-          sam deploy \
-            --template-file template.yaml \
-            --stack-name tempest-weather-store-lib \
-            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-            --no-confirm-changeset \
-            --no-fail-on-empty-changeset \
-            --debug
+        run: sam deploy --config-env prod

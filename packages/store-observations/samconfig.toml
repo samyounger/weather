@@ -1,0 +1,14 @@
+version = 0.1
+
+[prod.build.parameters]
+cached = true
+parallel = true
+
+[prod.deploy.parameters]
+stack_name = "tempest-weather-store-lib"
+resolve_s3 = true
+s3_prefix = "tempest-weather-store-lib"
+region = "eu-west-2"
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false
