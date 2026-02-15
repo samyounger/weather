@@ -36,6 +36,32 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Ensure artifact bucket and lifecycle policy
+        env:
+          ARTIFACT_BUCKET: tempest-artifacts-store-prod-926898703023
+          AWS_REGION: eu-west-2
+        run: |
+          if ! aws s3api head-bucket --bucket "$ARTIFACT_BUCKET" 2>/dev/null; then
+            aws s3api create-bucket \
+              --bucket "$ARTIFACT_BUCKET" \
+              --region "$AWS_REGION" \
+              --create-bucket-configuration LocationConstraint="$AWS_REGION"
+          fi
+
+          aws s3api put-bucket-lifecycle-configuration \
+            --bucket "$ARTIFACT_BUCKET" \
+            --lifecycle-configuration '{
+              "Rules": [
+                {
+                  "ID": "ExpireSamArtifactsAfter30Days",
+                  "Status": "Enabled",
+                  "Filter": { "Prefix": "" },
+                  "Expiration": { "Days": 30 },
+                  "NoncurrentVersionExpiration": { "NoncurrentDays": 30 }
+                }
+              ]
+            }'
+
       - name: Build store function and layer artifacts
         run: |
           npm run build --workspace=@weather/cloud-computing
