@@ -6,7 +6,7 @@ parallel = true
 
 [prod.deploy.parameters]
 stack_name = "tempest-weather-fetch-lib"
-resolve_s3 = true
+s3_bucket = "tempest-artifacts-fetch-prod-926898703023"
 s3_prefix = "tempest-weather-fetch-lib"
 region = "eu-west-2"
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
