@@ -2,15 +2,17 @@ import { AthenaClient } from "@aws-sdk/client-athena";
 import { S3Client } from "@aws-sdk/client-s3";
 import { fromSSO } from "@aws-sdk/credential-provider-sso";
 
+const isLambda = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
 /*
   * Fetch the SSO credentials if not in production
   * @returns {Promise<undefined | Credentials>} The credentials to use for the client
  */
 const resolveCredentials = async () => {
-  if (process.env.NODE_ENV === "production") {
+  // In Lambda, always use the execution role (never SSO/profile)
+  if (isLambda || process.env.NODE_ENV === "production") {
     return undefined;
   }
-
   return await fromSSO({ profile: process.env.AWS_PROFILE })();
 };
 
@@ -34,7 +36,10 @@ export const storageClient = async (region: string): Promise<S3Client> => {
   * @returns {Promise<AthenaClient>} The database client
  */
 export const databaseClient = async (region: string): Promise<AthenaClient> => {
-  const credentials = process.env.NODE_ENV !== "production" ? await fromSSO({ profile: process.env.AWS_PROFILE })(): undefined;
+  // In Lambda, always use the execution role (never SSO/profile)
+  const credentials = isLambda || process.env.NODE_ENV === "production"
+    ? undefined
+    : await fromSSO({ profile: process.env.AWS_PROFILE })();
 
   return new AthenaClient({
     region,
