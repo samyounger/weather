@@ -1,0 +1,14 @@
+version = 0.1
+
+[prod.build.parameters]
+cached = true
+parallel = true
+
+[prod.deploy.parameters]
+stack_name = "tempest-weather-refine-lib"
+s3_bucket = "tempest-artifacts-refine-prod-926898703023"
+s3_prefix = "tempest-weather-refine-lib"
+region = "eu-west-2"
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false

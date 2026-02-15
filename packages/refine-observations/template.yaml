@@ -1,0 +1,28 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: Lambda application for refining Tempest weather observations.
+Resources:
+  TempestLambdaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      Runtime: nodejs24.x
+      CodeUri: function/.
+      Description: Refine Tempest weather observations.
+      MemorySize: 1024
+      Timeout: 60
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - AWSLambda_ReadOnlyAccess
+        - AWSXrayWriteOnlyAccess
+      Tracing: Active
+      Layers:
+        - !Ref TempestLambdaDependencies
+  TempestLambdaDependencies:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: tempest-weather-refine-lib
+      Description: Dependencies for the Tempest weather observations REFINER app.
+      ContentUri: ../../lib/.
+      CompatibleRuntimes:
+        - nodejs24.x
