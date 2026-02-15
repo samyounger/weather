@@ -74,16 +74,12 @@ jobs:
         working-directory: packages/fetch-observations
         run: sam build --config-env prod
 
-      - name: Load .env and set SAM deploy parameters
-        id: dotenv
+      - name: Set SAM deploy parameters from repo variables and secrets
         run: |
-          set -a
-          source .env
-          set +a
-          echo "TEMPEST_HOST=$TEMPEST_HOST" >> $GITHUB_ENV
-          echo "TEMPEST_TOKEN=$TEMPEST_TOKEN" >> $GITHUB_ENV
-          echo "TEMPEST_DEVICE_ID=$TEMPEST_DEVICE_ID" >> $GITHUB_ENV
-          echo "TEMPEST_STATION_ID=$TEMPEST_STATION_ID" >> $GITHUB_ENV
+          echo "TEMPEST_HOST=${{ vars.TEMPEST_HOST }}" >> $GITHUB_ENV
+          echo "TEMPEST_TOKEN=${{ secrets.TEMPEST_TOKEN }}" >> $GITHUB_ENV
+          echo "TEMPEST_DEVICE_ID=${{ vars.TEMPEST_DEVICE_ID }}" >> $GITHUB_ENV
+          echo "TEMPEST_STATION_ID=${{ vars.TEMPEST_STATION_ID }}" >> $GITHUB_ENV
 
       - name: Deploy SAM application
         working-directory: packages/fetch-observations
