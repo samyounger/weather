@@ -1,0 +1,38 @@
+{
+  "name": "@weather/refine-observations",
+  "version": "1.0.0",
+  "description": "Refine weather observations in AWS Lambda",
+  "main": "function/index.js",
+  "scripts": {
+    "build": "rimraf ./function && tsc -p tsconfig.lib.json",
+    "build:prod": "NODE_ENV=production npm run build",
+    "test": "node ../../node_modules/jest/bin/jest.js --passWithNoTests",
+    "test:coverage": "npm run test -- --coverage",
+    "start:dev": "npx nodemon",
+    "start": "npm run build && node -e 'require(\"./function/index.js\").handler({})'",
+    "lint": "eslint .",
+    "lint:fix": "npm run lint -- --fix",
+    "deploy": "npm run build --workspace=@weather/cloud-computing && npm run build --workspace=@weather/refine-observations && mkdir -p ../../lib/nodejs && rm -rf ../../lib/nodejs/node_modules && cp -RL ../../node_modules ../../lib/nodejs && sam build --config-env prod && sam deploy --config-env prod",
+    "deploy:cleanup": "sam delete --config-env prod --no-prompts"
+  },
+  "author": "Sam Younger",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/aws-lambda": "*",
+    "@types/jest": "*",
+    "@types/node": "*",
+    "@typescript-eslint/eslint-plugin": "*",
+    "@typescript-eslint/parser": "*",
+    "eslint": "*",
+    "jest": "*",
+    "nodemon": "*",
+    "rimraf": "*",
+    "ts-jest": "*",
+    "ts-node": "*",
+    "typescript": "*"
+  },
+  "peerDependencies": {
+    "@weather/cloud-computing": "*",
+    "aws-lambda": "*"
+  }
+}

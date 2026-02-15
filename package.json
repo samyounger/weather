@@ -7,6 +7,7 @@
   "workspaces": [
     "packages/cloud-computing",
     "packages/fetch-observations",
+    "packages/refine-observations",
     "packages/store-observations"
   ],
   "scripts": {
