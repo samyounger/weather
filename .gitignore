@@ -6,3 +6,4 @@ bucket-name.txt
 *out.yml
 *out.json
 coverage
+.aws-sam
