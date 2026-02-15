@@ -24,6 +24,7 @@ Resources:
         Statement:
           - Action:
               - s3:ListBucket
+              - s3:GetBucketLocation
             Effect: Allow
             Resource:
               - !Sub "arn:aws:s3:::weather-tempest-records"
