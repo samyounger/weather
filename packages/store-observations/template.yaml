@@ -1,6 +1,19 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
 Description: An lambda application that communicates with the Tempest API, and stores the observations to S3.
+Parameters:
+  TempestHost:
+    Type: String
+    Description: Host for the Tempest API
+  TempestToken:
+    Type: String
+    Description: Token for the Tempest API
+  TempestDeviceId:
+    Type: String
+    Description: Device ID for the Tempest API
+  TempestStationId:
+    Type: String
+    Description: Station ID for the Tempest API
 Resources:
   TempestS3AccessPolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -38,6 +51,12 @@ Resources:
       Tracing: Active
       Layers:
         - !Ref TempestLambdaDependencies
+      Environment:
+        Variables:
+          TEMPEST_HOST: !Ref TempestHost
+          TEMPEST_TOKEN: !Ref TempestToken
+          TEMPEST_DEVICE_ID: !Ref TempestDeviceId
+          TEMPEST_STATION_ID: !Ref TempestStationId
   TempestLambdaDependencies:
     Type: AWS::Serverless::LayerVersion
     Properties:
