@@ -1,11 +1,13 @@
 name: Deploy Tempest Weather Store Lib
 
 on:
-  pull_request:
+  workflow_run:
+    workflows:
+      - Automation-Tests
     branches:
       - main
     types:
-      - closed
+      - completed
 
 permissions:
   id-token: write
@@ -13,12 +15,14 @@ permissions:
 
 jobs:
   deploy:
-    if: github.event.pull_request.merged == true
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
