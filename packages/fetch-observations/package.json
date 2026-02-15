@@ -12,9 +12,8 @@
     "start": "npm run build && node -e 'require(\"./function/index.js\").handler({ queryStringParameters: { columns: \"windDirection\", year:\"2024\", monthMin:\"09\", monthMax:\"09\", dayMin:\"01\", dayMax:\"01\", hourMin:\"00\",hourMax:\"24\" } })'",
     "lint": "eslint .",
     "lint:fix": "npm run lint -- --fix",
-    "deploy": "bin/01-create-bucket.sh && bin/02-build-layer.sh && bin/03-deploy.sh",
-    "deploy:execute": "bin/04-invoke.sh",
-    "deploy:cleanup": "bin/05-cleanup.sh"
+    "deploy": "npm run build --workspace=@weather/cloud-computing && npm run build --workspace=@weather/fetch-observations && mkdir -p ../../lib/nodejs && rm -rf ../../lib/nodejs/node_modules && cp -RL ../../node_modules ../../lib/nodejs && sam build --config-env prod && sam deploy --config-env prod",
+    "deploy:cleanup": "sam delete --config-env prod --no-prompts"
   },
   "author": "Sam Younger",
   "license": "ISC",
