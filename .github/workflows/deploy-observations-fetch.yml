@@ -74,6 +74,23 @@ jobs:
         working-directory: packages/fetch-observations
         run: sam build --config-env prod
 
+      - name: Load .env and set SAM deploy parameters
+        id: dotenv
+        run: |
+          set -a
+          source .env
+          set +a
+          echo "TEMPEST_HOST=$TEMPEST_HOST" >> $GITHUB_ENV
+          echo "TEMPEST_TOKEN=$TEMPEST_TOKEN" >> $GITHUB_ENV
+          echo "TEMPEST_DEVICE_ID=$TEMPEST_DEVICE_ID" >> $GITHUB_ENV
+          echo "TEMPEST_STATION_ID=$TEMPEST_STATION_ID" >> $GITHUB_ENV
+
       - name: Deploy SAM application
         working-directory: packages/fetch-observations
-        run: sam deploy --config-env prod
+        run: |
+          sam deploy --config-env prod \
+            --parameter-overrides \
+              TempestHost=$TEMPEST_HOST \
+              TempestToken=$TEMPEST_TOKEN \
+              TempestDeviceId=$TEMPEST_DEVICE_ID \
+              TempestStationId=$TEMPEST_STATION_ID
