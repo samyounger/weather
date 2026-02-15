@@ -1,0 +1,58 @@
+name: Deploy Tempest Weather Fetch Lib
+
+on:
+  workflow_run:
+    workflows:
+      - Automation-Tests
+    branches:
+      - main
+    types:
+      - completed
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::926898703023:role/GitHubTempestCfnDeployRole
+          aws-region: eu-west-2
+
+      - name: Install SAM CLI
+        run: pip install aws-sam-cli
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build fetch function and layer artifacts
+        run: |
+          npm run build --workspace=@weather/fetch-observations
+          bash packages/fetch-observations/bin/02-build-layer.sh
+
+      - name: Build SAM application
+        run: |
+          sam build \
+            --template-file packages/fetch-observations/template.yaml
+
+      - name: Deploy SAM application
+        working-directory: packages/fetch-observations
+        run: |
+          sam deploy \
+            --template-file template.yaml \
+            --stack-name tempest-weather-fetch-lib \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --debug
