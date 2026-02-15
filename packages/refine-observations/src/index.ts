@@ -1,11 +1,23 @@
+import dotEnv from 'dotenv';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+import { Database } from '@weather/cloud-computing';
+import { RefinementService } from './services/refinement-service';
+
+dotEnv.config({ path:'../../.env' });
 
 export const handler = async (_event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+  const refinementService = new RefinementService(new Database());
+  const refinementSummary = await refinementService.refineForYesterday();
+
   return {
     statusCode: 200,
     body: JSON.stringify({
-      message: 'Observations refined',
-      refinedCount: 0,
+      message: refinementSummary.inserted
+        ? 'Observations refined successfully'
+        : 'Observations were already refined for target date',
+      date: refinementSummary.date,
+      inserted: refinementSummary.inserted,
+      existingRows: refinementSummary.existingRows,
     }),
   };
 };

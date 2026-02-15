@@ -55,14 +55,19 @@ export class Database {
   public async waitForQuery(queryExecutionId: string): Promise<QueryExecutionState | undefined> {
     const queryLoop = async (queryCount = 0): Promise<QueryExecutionState | undefined> => {
       const queryStatus = await this.queryStatus(queryExecutionId);
-      if (queryCount > 5 || queryStatus === 'SUCCEEDED') {
+      if (
+        queryStatus === QueryExecutionState.SUCCEEDED ||
+        queryStatus === QueryExecutionState.FAILED ||
+        queryStatus === QueryExecutionState.CANCELLED ||
+        queryCount >= 120
+      ) {
         return queryStatus;
       }
 
       return await new Promise((resolve) => {
         setTimeout(() => {
           resolve(queryLoop(queryCount += 1));
-        }, 500);
+        }, 2000);
       });
     };
 

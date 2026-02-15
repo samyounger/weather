@@ -2,6 +2,53 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
 Description: Lambda application for refining Tempest weather observations.
 Resources:
+  TempestS3AccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Tempest weather app access to S3 resources for observation refinement.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - s3:ListBucket
+            Effect: Allow
+            Resource:
+              - !Sub "arn:aws:s3:::weather-tempest-records"
+          - Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:AbortMultipartUpload
+              - s3:ListBucketMultipartUploads
+              - s3:ListMultipartUploadParts
+            Effect: Allow
+            Resource:
+              - !Sub "arn:aws:s3:::weather-tempest-records/*"
+  TempestAthenaGlueAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Tempest weather app access to Athena and Glue resources for refinement.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - athena:StartQueryExecution
+              - athena:GetQueryExecution
+              - athena:GetQueryResults
+            Effect: Allow
+            Resource: "*"
+          - Action:
+              - glue:GetDatabase
+              - glue:GetDatabases
+              - glue:GetTable
+              - glue:GetTables
+              - glue:GetPartition
+              - glue:GetPartitions
+              - glue:CreateTable
+              - glue:UpdateTable
+              - glue:BatchCreatePartition
+              - glue:CreatePartition
+            Effect: Allow
+            Resource: "*"
   TempestLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -15,9 +62,18 @@ Resources:
         - AWSLambdaBasicExecutionRole
         - AWSLambda_ReadOnlyAccess
         - AWSXrayWriteOnlyAccess
+        - !Ref TempestS3AccessPolicy
+        - !Ref TempestAthenaGlueAccessPolicy
       Tracing: Active
       Layers:
         - !Ref TempestLambdaDependencies
+      Events:
+        TempestRefineSchedule:
+          Type: Schedule
+          Properties:
+            Description: Invoke the refinement Lambda every day at 05:00 UTC.
+            Schedule: "cron(0 5 * * ? *)"
+            Enabled: true
   TempestLambdaDependencies:
     Type: AWS::Serverless::LayerVersion
     Properties:

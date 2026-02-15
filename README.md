@@ -38,6 +38,38 @@ If you are using [AWS SSO](https://aws.amazon.com/blogs/security/how-to-configur
 ### Destroy fetch infrastructure
 `$ npm run deploy:cleanup --workspace=@weather/fetch-observations`
 
+### Deploy refine package
+`$ npm run deploy --workspace=@weather/refine-observations`
+
+### Destroy refine infrastructure
+`$ npm run deploy:cleanup --workspace=@weather/refine-observations`
+
+## Refine Observations Logic
+
+`refine-observations` is a scheduled Lambda that transforms high-frequency raw observations into lower-frequency analytical data for Athena.
+
+### Why this exists
+- Raw observations are written as many small JSON objects under partitioned S3 paths.
+- Athena queries over longer date ranges become slow and expensive when scanning the raw dataset.
+- Refinement reduces row volume and stores query-friendly parquet data.
+
+### What it does
+1. Runs daily (UTC schedule) and targets the previous UTC day.
+2. Ensures a refined Athena table exists: `observations_refined_15m`.
+3. Checks whether refined rows already exist for that day and skips processing if they do (idempotent behavior).
+4. If not refined yet, aggregates raw `observations` into 15-minute buckets:
+   - average values (for example temperature/humidity/wind averages)
+   - max wind gust
+   - summed rainfall
+   - sample count
+5. Writes refined parquet output to:
+   - `s3://weather-tempest-records/refined/observations_refined_15m/`
+   - partitioned by `year/month/day/hour`
+
+### Query strategy
+- Use raw `observations` for short, high-detail windows.
+- Use `observations_refined_15m` for broader date ranges to significantly reduce Athena scan size and latency.
+
 ## Environment variables
 
 The following environment variables are required for the source code, as provided in a .env file at root of the project. The application uses the [dotenv](https://github.com/motdotla/dotenv) module to make these variables available in the source code, example `process.env.NODE_ENV`.
