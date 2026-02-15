@@ -42,7 +42,7 @@ jobs:
           npm run build --workspace=@weather/store-observations
           mkdir -p lib/nodejs
           rm -rf lib/nodejs/node_modules
-          cp -r node_modules lib/nodejs
+          cp -RL node_modules lib/nodejs
 
       - name: Build SAM application
         working-directory: packages/store-observations
