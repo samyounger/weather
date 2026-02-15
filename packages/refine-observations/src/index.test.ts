@@ -21,20 +21,54 @@ const mockRefineForYesterday = jest.fn().mockResolvedValue({
 describe('handler', () => {
   let subject: APIGatewayProxyResult;
 
-  beforeEach(async () => {
-    subject = await handler(mockEvent);
+  beforeEach(() => {
+    mockRefineForYesterday.mockResolvedValue({
+      date: '2026-02-14',
+      inserted: true,
+      existingRows: 0,
+    });
   });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const invokeHandler = async (): Promise<void> => {
+    subject = await handler(mockEvent);
+  };
 
   it('should return a status code', () => {
-    expect(subject.statusCode).toBe(200);
+    return invokeHandler().then(() => {
+      expect(subject.statusCode).toBe(200);
+    });
   });
 
-  it('should return a body', () => {
+  it('should return a success body when new refinement is inserted', async () => {
+    await invokeHandler();
+
     expect(subject.body).toEqual(JSON.stringify({
       message: 'Observations refined successfully',
       date: '2026-02-14',
       inserted: true,
       existingRows: 0,
+    }));
+  });
+
+  it('should return an already-refined message when no insert is needed', async () => {
+    mockRefineForYesterday.mockResolvedValueOnce({
+      date: '2026-02-14',
+      inserted: false,
+      existingRows: 96,
+    });
+
+    await invokeHandler();
+
+    expect(subject.statusCode).toBe(200);
+    expect(subject.body).toEqual(JSON.stringify({
+      message: 'Observations were already refined for target date',
+      date: '2026-02-14',
+      inserted: false,
+      existingRows: 96,
     }));
   });
 });
