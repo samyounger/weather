@@ -17,11 +17,10 @@ This folder contains a one-off backfill workflow that discovers historical S3 pa
 
 ## Build and deploy
 
-Run from this directory:
+Run from repo root:
 
 ```bash
-sam build -t template.yaml
-sam deploy --guided
+npm run deploy --workspace=@weather/backfill-observations
 ```
 
 ## Start execution

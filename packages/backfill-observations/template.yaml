@@ -65,7 +65,7 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         EntryPoints:
-          - planner.ts
+          - src/planner.ts
         Minify: false
         Target: es2020
 
@@ -110,7 +110,7 @@ Resources:
       BuildMethod: esbuild
       BuildProperties:
         EntryPoints:
-          - worker.ts
+          - src/worker.ts
         Minify: false
         Target: es2020
 

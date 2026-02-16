@@ -8,8 +8,6 @@
     "build:prod": "NODE_ENV=production npm run build",
     "test": "node ../../node_modules/jest/bin/jest.js",
     "test:coverage": "npm run test -- --coverage",
-    "backfill:build": "sam build -t backfill/template.yaml",
-    "backfill:deploy": "sam deploy --guided -t backfill/template.yaml",
     "start:dev": "npx nodemon",
     "start": "npm run build && node -e 'require(\"./function/index.js\").handler()'",
     "lint": "eslint .",
