@@ -16,6 +16,7 @@
   "author": "Sam Younger",
   "license": "ISC",
   "devDependencies": {
+    "esbuild": "*",
     "@types/jest": "*",
     "@types/node": "*",
     "@typescript-eslint/eslint-plugin": "*",
