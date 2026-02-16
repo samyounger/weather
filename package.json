@@ -41,8 +41,8 @@
     "typescript-eslint": "^8.4.0"
   },
   "dependencies": {
-    "@aws-sdk/client-athena": "^3.645.0",
-    "@aws-sdk/client-s3": "^3.629.0",
+    "@aws-sdk/client-athena": "^3.990.0",
+    "@aws-sdk/client-s3": "^3.990.0",
     "@aws-sdk/credential-provider-sso": "^3.629.0",
     "aws-lambda": "^1.0.7",
     "dotenv": "^16.4.5"
