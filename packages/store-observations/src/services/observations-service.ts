@@ -41,8 +41,8 @@ export class ObservationsService {
   };
 
   private yesterdaysDate = (): Date => {
-    const date = new Date();
-    date.setDate(date.getDate() - 1); // yesterday
-    return date;
+    const now = new Date();
+
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - 1));
   };
 }

@@ -1,5 +1,5 @@
 import { GetQueryResultsOutput, QueryExecutionState } from '@aws-sdk/client-athena';
-import { Database } from '@weather/cloud-computing';
+import { Database, partitionDatePartsUtc } from '@weather/cloud-computing';
 import { RefinementQueries } from './refinement-queries';
 
 export type RefinementSummary = {
@@ -18,7 +18,8 @@ export class RefinementService {
   }
 
   public async refineForDate(targetDate: Date): Promise<RefinementSummary> {
-    const parts = this.partitionDateParts(targetDate);
+    const { year, month, day } = partitionDatePartsUtc(targetDate);
+    const parts = { year, month, day };
 
     await this.executeQuery(RefinementQueries.createRefinedTable());
 
@@ -88,14 +89,6 @@ export class RefinementService {
     const numericValue = Number(resultValue);
 
     return Number.isNaN(numericValue) ? 0 : numericValue;
-  }
-
-  private partitionDateParts(targetDate: Date): { year: string; month: string; day: string } {
-    const year = targetDate.getUTCFullYear().toString();
-    const month = (targetDate.getUTCMonth() + 1).toString().padStart(2, '0');
-    const day = targetDate.getUTCDate().toString().padStart(2, '0');
-
-    return { year, month, day };
   }
 
   private yesterdayUtc(): Date {

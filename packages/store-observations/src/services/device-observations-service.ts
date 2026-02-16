@@ -1,5 +1,5 @@
 import { PutObjectCommandOutput } from "@aws-sdk/client-s3";
-import { Database } from '@weather/cloud-computing';
+import { Database, partitionDateKeyUtc } from '@weather/cloud-computing';
 import { Device } from "../models";
 import { ObservationsService } from "./observations-service";
 
@@ -23,12 +23,7 @@ export class DeviceObservationsService {
     // Add Athena partition for each hour with data
     const partitionSet = new Set<string>();
     for (const obs of reading.observations) {
-      const date = new Date(obs.dateTime * 1000);
-      const year = date.getUTCFullYear().toString();
-      const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
-      const day = date.getUTCDate().toString().padStart(2, '0');
-      const hour = date.getUTCHours().toString().padStart(2, '0');
-      partitionSet.add(`${year}-${month}-${day}-${hour}`);
+      partitionSet.add(partitionDateKeyUtc(new Date(obs.dateTime * 1000)));
     }
     for (const key of partitionSet) {
       const [year, month, day, hour] = key.split('-');
