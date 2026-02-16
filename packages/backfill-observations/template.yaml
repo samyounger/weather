@@ -40,7 +40,7 @@ Resources:
     Properties:
       Runtime: nodejs24.x
       Handler: planner.handler
-      CodeUri: .
+      CodeUri: function/.
       Timeout: 900
       MemorySize: 512
       Environment:
@@ -61,20 +61,12 @@ Resources:
                 - s3:GetObject
                 - s3:PutObject
               Resource: !Sub arn:aws:s3:::${BackfillBucket}/*
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        EntryPoints:
-          - src/planner.ts
-        Minify: false
-        Target: es2020
-
   BackfillWorkerFunction:
     Type: AWS::Serverless::Function
     Properties:
       Runtime: nodejs24.x
       Handler: worker.handler
-      CodeUri: .
+      CodeUri: function/.
       Timeout: 900
       MemorySize: 1024
       Environment:
@@ -106,32 +98,16 @@ Resources:
                 - glue:CreatePartition
                 - glue:BatchCreatePartition
               Resource: '*'
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        EntryPoints:
-          - src/worker.ts
-        Minify: false
-        Target: es2020
-
   BackfillSummarizeFunction:
     Type: AWS::Serverless::Function
     Properties:
       Runtime: nodejs24.x
       Handler: summarize.handler
-      CodeUri: .
+      CodeUri: function/.
       Timeout: 60
       MemorySize: 256
       Policies:
         - AWSLambdaBasicExecutionRole
-    Metadata:
-      BuildMethod: esbuild
-      BuildProperties:
-        EntryPoints:
-          - src/summarize.ts
-        Minify: false
-        Target: es2020
-
   BackfillStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:

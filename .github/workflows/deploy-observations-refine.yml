@@ -66,9 +66,11 @@ jobs:
         run: |
           npm run build --workspace=@weather/cloud-computing
           npm run build --workspace=@weather/refine-observations
+          npm prune --omit=dev
           mkdir -p lib/nodejs
           rm -rf lib/nodejs/node_modules
           cp -RL node_modules lib/nodejs
+          if [ -d lib/nodejs/node_modules/@weather ]; then find lib/nodejs/node_modules/@weather -mindepth 1 -maxdepth 1 ! -name cloud-computing -exec rm -rf {} +; fi
 
       - name: Build SAM application
         working-directory: packages/refine-observations
