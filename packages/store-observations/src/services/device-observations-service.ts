@@ -20,19 +20,23 @@ export class DeviceObservationsService {
     const insertResult = await Promise.allSettled(readingInserts);
     console.debug('inserted readings: ', insertResult.length);
 
-    // Add Athena partition for each hour with data
-    const partitionSet = new Set<string>();
-    for (const obs of reading.observations) {
-      partitionSet.add(partitionDateKeyUtc(new Date(obs.dateTime * 1000)));
-    }
-    for (const key of partitionSet) {
-      const [year, month, day, hour] = key.split('-');
-      await this.database.addObservationsPartition(year, month, day, hour);
-    }
+    await this.addAthenaPartitions(reading);
 
     return {
       insertResult,
       reading,
     };
+  }
+
+  private async addAthenaPartitions(reading: Device): Promise<void> {
+    const partitionSet = new Set<string>();
+    for (const obs of reading.observations) {
+      partitionSet.add(partitionDateKeyUtc(new Date(obs.dateTime * 1000)));
+    }
+
+    for (const key of partitionSet) {
+      const [year, month, day, hour] = key.split('-');
+      await this.database.addObservationsPartition(year, month, day, hour);
+    }
   }
 }
