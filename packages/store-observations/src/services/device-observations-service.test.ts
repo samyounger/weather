@@ -117,5 +117,18 @@ describe('DeviceObservationsService', () => {
 
       expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 1, failed: 1 });
     });
+
+    it('should count failed partitions when add partition throws', async () => {
+      addObservationsPartitionMock
+        .mockResolvedValueOnce(true)
+        .mockRejectedValueOnce(new Error('athena unavailable'));
+      debugSpy.mockClear();
+
+      const readingPromise = service.fetchAndInsertReading();
+      jest.advanceTimersByTime(RESPONSE_DURATION);
+      await expect(readingPromise).resolves.toBeDefined();
+
+      expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 1, failed: 1 });
+    });
   });
 });
