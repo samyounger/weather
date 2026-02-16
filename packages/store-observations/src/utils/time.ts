@@ -1,13 +1,12 @@
+import { partitionDatePartsUtc } from "@weather/cloud-computing";
+
 /*
  * Format date to string in format 'YYYY/MM/DD/'
  * @param {Date} date
  * @returns {string}
  */
 export const formatDateToString = (date: Date): string => {
-  const year = date.getFullYear().toString();
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  const hour = date.getHours().toString().padStart(2, '0');
+  const { year, month, day, hour } = partitionDatePartsUtc(date);
 
   return `year=${year}/month=${month}/day=${day}/hour=${hour}/`;
 };
@@ -18,8 +17,25 @@ export const formatDateToString = (date: Date): string => {
  * @returns {object}
  */
 export const dateStartEndSeconds = (date: Date): { start: number, end: number } => {
-  const startTime = Math.floor(date.setHours(0, 0, 0, 0) / 1000);
-  const endTime = Math.floor(date.setHours(23, 59, 59, 999) / 1000);
+  const startTime = Math.floor(Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    0,
+    0,
+    0,
+    0,
+  ) / 1000);
+  const endTime = Math.floor(Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    23,
+    59,
+    59,
+    999,
+  ) / 1000);
+
   return { start: startTime, end: endTime };
 };
 

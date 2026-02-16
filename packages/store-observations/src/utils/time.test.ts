@@ -5,7 +5,7 @@ describe('time', () => {
     beforeEach(() => {
       jest
         .useFakeTimers()
-        .setSystemTime(new Date('2020-01-01T11:32:56'));
+        .setSystemTime(new Date('2020-01-01T11:32:56Z'));
     });
 
     it('should return the date in format YYYY-MM-DD', () => {

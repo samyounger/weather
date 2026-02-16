@@ -100,4 +100,29 @@ export class Database {
     const command = new GetQueryResultsCommand(input);
     return await client.send(command);
   }
+
+  /**
+   * Adds a partition to the observations table for the given year, month, day, hour.
+   * @param year string
+   * @param month string
+   * @param day string
+   * @param hour string
+   * @returns Promise<boolean>
+   */
+  public async addObservationsPartition(year: string, month: string, day: string, hour: string): Promise<boolean> {
+    const partitionLocation = `s3://weather-tempest-records/year=${year}/month=${month}/day=${day}/hour=${hour}/`;
+    const query = `ALTER TABLE observations ADD IF NOT EXISTS PARTITION (year='${year}', month='${month}', day='${day}', hour='${hour}') LOCATION '${partitionLocation}';`;
+    try {
+      const result = await this.query(query);
+      const queryId = result.QueryExecutionId;
+      if (!queryId) {
+        return false;
+      }
+
+      const state = await this.waitForQuery(queryId);
+      return state === QueryExecutionState.SUCCEEDED;
+    } catch {
+      return false;
+    }
+  }
 }
