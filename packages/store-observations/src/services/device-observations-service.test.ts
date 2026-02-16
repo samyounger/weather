@@ -1,7 +1,7 @@
 import { DeviceObservationsService } from "./device-observations-service";
 import { ObservationsService } from "./observations-service";
 import { DeviceObservationFactory } from "../factories/device-observation-factory";
-import { Storage } from "@weather/cloud-computing";
+import { Database, Storage } from "@weather/cloud-computing";
 import { Device } from "../models";
 import { PutObjectCommandOutput } from "@aws-sdk/client-s3";
 import { RESPONSE_DURATION } from "./__mocks__/observations-service";
@@ -14,17 +14,18 @@ jest.mock('@weather/cloud-computing');
 describe('DeviceObservationsService', () => {
   const debugSpy = jest.spyOn(console, 'debug').mockImplementation(() => {});
   const observationsService = new ObservationsService(new Storage(), new DeviceObservationFactory());
-  const database = {
-    addObservationsPartition: jest.fn().mockResolvedValue(true),
+  const addObservationsPartitionMock: jest.MockedFunction<Database['addObservationsPartition']> = jest.fn().mockResolvedValue(true);
+  const database: Pick<Database, 'addObservationsPartition'> = {
+    addObservationsPartition: addObservationsPartitionMock,
   };
-  const service = new DeviceObservationsService(observationsService, database as any);
+  const service = new DeviceObservationsService(observationsService, database as unknown as Database);
 
   describe('fetchAndInsertReading', () => {
     let subject:  { insertResult: PromiseSettledResult<PutObjectCommandOutput>[], reading: Device };
 
     beforeEach(async () => {
-      database.addObservationsPartition.mockReset();
-      database.addObservationsPartition.mockResolvedValue(true);
+      addObservationsPartitionMock.mockReset();
+      addObservationsPartitionMock.mockResolvedValue(true);
       debugSpy.mockClear();
       const reading = service.fetchAndInsertReading();
       jest.advanceTimersByTime(RESPONSE_DURATION);
@@ -94,7 +95,7 @@ describe('DeviceObservationsService', () => {
         ],
       });
       (observationsService.readObservation as jest.Mock).mockResolvedValueOnce(reading);
-      database.addObservationsPartition.mockClear();
+      addObservationsPartitionMock.mockClear();
 
       const readingPromise = service.fetchAndInsertReading();
       jest.advanceTimersByTime(RESPONSE_DURATION);
@@ -105,7 +106,7 @@ describe('DeviceObservationsService', () => {
     });
 
     it('should log succeeded and failed partition counts', async () => {
-      database.addObservationsPartition
+      addObservationsPartitionMock
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(false);
       debugSpy.mockClear();
