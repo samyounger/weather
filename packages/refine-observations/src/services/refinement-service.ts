@@ -4,7 +4,7 @@ import { RefinementQueries } from './refinement-queries';
 
 export type RefinementSummary = {
   date: string;
-  inserted: boolean;
+  inserted: number;
   existingRows: number;
 };
 
@@ -27,16 +27,17 @@ export class RefinementService {
     if (existingRows > 0) {
       return {
         date: `${parts.year}-${parts.month}-${parts.day}`,
-        inserted: false,
+        inserted: 0,
         existingRows,
       };
     }
 
     await this.executeQuery(RefinementQueries.insertRefinedRowsForDate(parts));
+    const rowsAfterInsert = await this.querySingleNumericResult(RefinementQueries.existingRowsForDate(parts));
 
     return {
       date: `${parts.year}-${parts.month}-${parts.day}`,
-      inserted: true,
+      inserted: rowsAfterInsert,
       existingRows,
     };
   }
