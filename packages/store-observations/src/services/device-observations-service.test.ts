@@ -12,9 +12,10 @@ jest.mock('./observations-service');
 jest.mock('@weather/cloud-computing');
 
 describe('DeviceObservationsService', () => {
+  const debugSpy = jest.spyOn(console, 'debug').mockImplementation(() => {});
   const observationsService = new ObservationsService(new Storage(), new DeviceObservationFactory());
   const database = {
-    addObservationsPartition: jest.fn().mockResolvedValue(undefined),
+    addObservationsPartition: jest.fn().mockResolvedValue(true),
   };
   const service = new DeviceObservationsService(observationsService, database as any);
 
@@ -22,7 +23,9 @@ describe('DeviceObservationsService', () => {
     let subject:  { insertResult: PromiseSettledResult<PutObjectCommandOutput>[], reading: Device };
 
     beforeEach(async () => {
-      database.addObservationsPartition.mockClear();
+      database.addObservationsPartition.mockReset();
+      database.addObservationsPartition.mockResolvedValue(true);
+      debugSpy.mockClear();
       const reading = service.fetchAndInsertReading();
       jest.advanceTimersByTime(RESPONSE_DURATION);
       subject = await reading;
@@ -79,6 +82,7 @@ describe('DeviceObservationsService', () => {
       expect(database.addObservationsPartition).toHaveBeenNthCalledWith(1, '2024', '08', '05', '22');
       expect(database.addObservationsPartition).toHaveBeenNthCalledWith(2, '2040', '06', '09', '23');
       expect(database.addObservationsPartition).toHaveBeenCalledTimes(2);
+      expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 2, failed: 0 });
     });
 
     it('should only add one partition when multiple observations share the same hour', async () => {
@@ -98,6 +102,19 @@ describe('DeviceObservationsService', () => {
 
       expect(database.addObservationsPartition).toHaveBeenCalledTimes(1);
       expect(database.addObservationsPartition).toHaveBeenCalledWith('2024', '08', '05', '22');
+    });
+
+    it('should log succeeded and failed partition counts', async () => {
+      database.addObservationsPartition
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      debugSpy.mockClear();
+
+      const readingPromise = service.fetchAndInsertReading();
+      jest.advanceTimersByTime(RESPONSE_DURATION);
+      await readingPromise;
+
+      expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 1, failed: 1 });
     });
   });
 });
