@@ -5,6 +5,7 @@ import { Storage } from "@weather/cloud-computing";
 import { Device } from "../models";
 import { PutObjectCommandOutput } from "@aws-sdk/client-s3";
 import { RESPONSE_DURATION } from "./__mocks__/observations-service";
+import observations from "../factories/__mocks__/observations.json";
 jest.useFakeTimers();
 
 jest.mock('./observations-service');
@@ -12,12 +13,16 @@ jest.mock('@weather/cloud-computing');
 
 describe('DeviceObservationsService', () => {
   const observationsService = new ObservationsService(new Storage(), new DeviceObservationFactory());
-  const service = new DeviceObservationsService(observationsService);
+  const database = {
+    addObservationsPartition: jest.fn().mockResolvedValue(undefined),
+  };
+  const service = new DeviceObservationsService(observationsService, database as any);
 
   describe('fetchAndInsertReading', () => {
     let subject:  { insertResult: PromiseSettledResult<PutObjectCommandOutput>[], reading: Device };
 
     beforeEach(async () => {
+      database.addObservationsPartition.mockClear();
       const reading = service.fetchAndInsertReading();
       jest.advanceTimersByTime(RESPONSE_DURATION);
       subject = await reading;
@@ -68,6 +73,31 @@ describe('DeviceObservationsService', () => {
     it('should return an object with insertCount and reading properties', () => {
       expect(subject).toHaveProperty('insertResult');
       expect(subject).toHaveProperty('reading');
+    });
+
+    it('should add an athena partition for each hour with observations', () => {
+      expect(database.addObservationsPartition).toHaveBeenNthCalledWith(1, '2024', '08', '05', '22');
+      expect(database.addObservationsPartition).toHaveBeenNthCalledWith(2, '2040', '06', '09', '23');
+      expect(database.addObservationsPartition).toHaveBeenCalledTimes(2);
+    });
+
+    it('should only add one partition when multiple observations share the same hour', async () => {
+      const reading = new DeviceObservationFactory().build({
+        ...observations,
+        obs: [
+          observations.obs[0],
+          [1722897000, ...observations.obs[0].slice(1)] as typeof observations.obs[number],
+        ],
+      });
+      (observationsService.readObservation as jest.Mock).mockResolvedValueOnce(reading);
+      database.addObservationsPartition.mockClear();
+
+      const readingPromise = service.fetchAndInsertReading();
+      jest.advanceTimersByTime(RESPONSE_DURATION);
+      await readingPromise;
+
+      expect(database.addObservationsPartition).toHaveBeenCalledTimes(1);
+      expect(database.addObservationsPartition).toHaveBeenCalledWith('2024', '08', '05', '22');
     });
   });
 });

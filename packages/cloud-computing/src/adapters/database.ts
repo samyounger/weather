@@ -107,15 +107,22 @@ export class Database {
    * @param month string
    * @param day string
    * @param hour string
-   * @returns Promise<void>
+   * @returns Promise<boolean>
    */
-  public async addObservationsPartition(year: string, month: string, day: string, hour: string): Promise<void> {
+  public async addObservationsPartition(year: string, month: string, day: string, hour: string): Promise<boolean> {
     const partitionLocation = `s3://weather-tempest-records/year=${year}/month=${month}/day=${day}/hour=${hour}/`;
     const query = `ALTER TABLE observations ADD IF NOT EXISTS PARTITION (year='${year}', month='${month}', day='${day}', hour='${hour}') LOCATION '${partitionLocation}';`;
-    const result = await this.query(query);
-    const queryId = result.QueryExecutionId;
-    if (!queryId) throw new Error('Failed to execute partition add query');
-    const state = await this.waitForQuery(queryId);
-    if (state !== QueryExecutionState.SUCCEEDED) throw new Error(`Partition add query failed with status: ${state}`);
+    try {
+      const result = await this.query(query);
+      const queryId = result.QueryExecutionId;
+      if (!queryId) {
+        return false;
+      }
+
+      const state = await this.waitForQuery(queryId);
+      return state === QueryExecutionState.SUCCEEDED;
+    } catch {
+      return false;
+    }
   }
 }
