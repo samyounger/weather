@@ -33,6 +33,30 @@ Resources:
           - Action: s3:PutObject
             Effect: Allow
             Resource: !Sub "arn:aws:s3:::weather-tempest-records/*"
+  TempestAthenaGlueAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Tempest weather app access to Athena and Glue resources for partition updates.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - athena:StartQueryExecution
+              - athena:GetQueryExecution
+              - athena:GetQueryResults
+            Effect: Allow
+            Resource: "*"
+          - Action:
+              - glue:GetDatabase
+              - glue:GetDatabases
+              - glue:GetTable
+              - glue:GetTables
+              - glue:GetPartition
+              - glue:GetPartitions
+              - glue:CreatePartition
+              - glue:BatchCreatePartition
+            Effect: Allow
+            Resource: "*"
   TempestLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -48,6 +72,7 @@ Resources:
         - AWSLambda_ReadOnlyAccess
         - AWSXrayWriteOnlyAccess
         - !Ref TempestS3AccessPolicy
+        - !Ref TempestAthenaGlueAccessPolicy
       Tracing: Active
       Layers:
         - !Ref TempestLambdaDependencies
