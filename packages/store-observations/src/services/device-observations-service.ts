@@ -14,7 +14,11 @@ export class DeviceObservationsService {
     private readonly database: Database,
   ) {}
 
-  public async fetchAndInsertReading(): Promise<{ insertResult: PromiseSettledResult<PutObjectCommandOutput>[], reading: Device }> {
+  public async fetchAndInsertReading(): Promise<{
+    insertResult: PromiseSettledResult<PutObjectCommandOutput>[];
+    reading: Device;
+    partitionStatus: AthenaPartitionStatus;
+  }> {
     const reading = await this.observationsService.readObservation();
     console.debug('readings: ', { ...reading, observations: reading.observations.length });
     console.debug('inserting readings: ', reading.observations.map((obs) => obs.dateTime.toString()));
@@ -31,6 +35,7 @@ export class DeviceObservationsService {
     return {
       insertResult,
       reading,
+      partitionStatus,
     };
   }
 
