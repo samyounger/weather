@@ -44,6 +44,7 @@ describe('backfill planner', () => {
     sendMock
       .mockResolvedValueOnce({
         Contents: [
+          { Key: 'misc/not-a-partition-file.json' },
           { Key: 'year=2024/month=08/day=05/hour=22/1722896065.json' },
           { Key: 'year=2024/month=08/day=05/hour=22/1722897000.json' },
         ],
@@ -79,5 +80,30 @@ describe('backfill planner', () => {
     expect(putCalls[2].input.Key).toEqual(
       'backfill/athena-partitions/runs/2026-02-16T00-00-00-000Z/manifest.json',
     );
+  });
+
+  it('should use default configuration and handle empty S3 pages', async () => {
+    sendMock
+      .mockResolvedValueOnce({})
+      .mockResolvedValue({});
+
+    const { handler } = await import('./planner');
+    const subject = await handler();
+
+    expect(subject).toEqual({
+      bucket: 'weather-tempest-records',
+      outputPrefix: 'backfill/athena-partitions',
+      manifestKey: 'backfill/athena-partitions/runs/2026-02-16T00-00-00-000Z/manifest.json',
+      totalPartitions: 0,
+      totalChunks: 0,
+      chunkKeys: [],
+    });
+
+    const listCommand = sendMock.mock.calls[0][0] as ListObjectsV2Command;
+    expect(listCommand.input).toEqual({
+      Bucket: 'weather-tempest-records',
+      Prefix: '',
+      ContinuationToken: undefined,
+    });
   });
 });

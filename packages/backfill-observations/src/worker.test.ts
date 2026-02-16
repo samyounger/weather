@@ -48,6 +48,18 @@ describe('backfill worker', () => {
     athenaClientMock.mockClear();
     s3ClientMock.mockClear();
     process.env.BACKFILL_POLL_DELAY_MS = '0';
+    process.env.BACKFILL_MAX_POLLS = '120';
+  });
+
+  it('should throw when chunk payload is missing', async () => {
+    s3SendMock.mockResolvedValueOnce({});
+
+    const { handler } = await import('./worker');
+
+    await expect(handler({
+      bucket: 'weather-tempest-records',
+      chunkKey: 'backfill/athena-partitions/runs/test/chunks/chunk-00000.json',
+    })).rejects.toThrow('Missing chunk payload for backfill/athena-partitions/runs/test/chunks/chunk-00000.json');
   });
 
   it('should process a chunk and add partitions in athena', async () => {
@@ -120,5 +132,43 @@ describe('backfill worker', () => {
       bucket: 'weather-tempest-records',
       chunkKey: 'backfill/athena-partitions/runs/test/chunks/chunk-00000.json',
     })).rejects.toThrow('Athena query query-123 failed with state: FAILED');
+  });
+
+  it('should throw when query polling reaches timeout', async () => {
+    process.env.BACKFILL_MAX_POLLS = '0';
+    s3SendMock.mockResolvedValueOnce({
+      Body: Readable.from([JSON.stringify([{ year: '2024', month: '08', day: '05', hour: '22' }])]),
+    });
+    athenaSendMock
+      .mockResolvedValueOnce({ QueryExecutionId: 'query-123' })
+      .mockResolvedValueOnce({
+        QueryExecution: {
+          Status: { State: QueryExecutionState.RUNNING },
+        },
+      });
+
+    const { handler } = await import('./worker');
+
+    await expect(handler({
+      bucket: 'weather-tempest-records',
+      chunkKey: 'backfill/athena-partitions/runs/test/chunks/chunk-00000.json',
+    })).rejects.toThrow('Athena query query-123 failed with state: undefined');
+  });
+
+  it('should handle undefined query status and non-buffer stream chunks', async () => {
+    process.env.BACKFILL_MAX_POLLS = '0';
+    s3SendMock.mockResolvedValueOnce({
+      Body: Readable.from([JSON.stringify([{ year: '2024', month: '08', day: '05', hour: '22' }]), '']),
+    });
+    athenaSendMock
+      .mockResolvedValueOnce({ QueryExecutionId: 'query-123' })
+      .mockResolvedValueOnce({ QueryExecution: {} });
+
+    const { handler } = await import('./worker');
+
+    await expect(handler({
+      bucket: 'weather-tempest-records',
+      chunkKey: 'backfill/athena-partitions/runs/test/chunks/chunk-00000.json',
+    })).rejects.toThrow('Athena query query-123 failed with state: undefined');
   });
 });
