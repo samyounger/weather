@@ -4,5 +4,6 @@ describe('backfill-observations index exports', () => {
 
     expect(subject.plannerHandler).toBeDefined();
     expect(subject.workerHandler).toBeDefined();
+    expect(subject.summarizeHandler).toBeDefined();
   });
 });

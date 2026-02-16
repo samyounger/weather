@@ -6,7 +6,8 @@ This folder contains a one-off backfill workflow that discovers historical S3 pa
 
 - `planner.ts`: scans S3 object keys, extracts `year/month/day/hour` partitions, writes chunk files + manifest.
 - `worker.ts`: reads one chunk, executes batched `ALTER TABLE ... ADD IF NOT EXISTS PARTITION ...` in Athena.
-- `template.yaml`: SAM template for planner/worker Lambdas and a Step Functions state machine.
+- `summarize.ts`: summarizes chunk outcomes and returns `failedChunkKeys` for retry runs.
+- `template.yaml`: SAM template for planner/worker/summarize Lambdas and a Step Functions state machine.
 
 ## Prerequisites
 
@@ -55,9 +56,33 @@ aws stepfunctions start-execution \
 - Planner writes:
   - `.../runs/<run-id>/manifest.json`
   - `.../runs/<run-id>/chunks/chunk-*.json`
+- State machine output contains:
+  - `totalChunks`
+  - `succeededChunks`
+  - `failedChunks`
+  - `failedChunkKeys`
+
+## Failed-only rerun
+
+Use failed chunk keys from the previous execution output to rerun only failed chunks:
+
+```json
+{
+  "bucket": "weather-tempest-records",
+  "chunkKeys": [
+    "backfill/athena-partitions/runs/2026-02-16T00-00-00-000Z/chunks/chunk-00012.json",
+    "backfill/athena-partitions/runs/2026-02-16T00-00-00-000Z/chunks/chunk-00044.json"
+  ],
+  "database": "tempest_weather",
+  "table": "observations",
+  "outputLocation": "s3://weather-tempest-records/queries/",
+  "workGroup": "primary"
+}
+```
 
 ## Notes
 
 - Backfill is idempotent via `ADD IF NOT EXISTS`.
+- If `chunkKeys` are provided in execution input, planner is skipped and only those chunks are processed.
 - Tune `chunkSize` and `MaxConcurrency` if Athena throttles.
-- Safe rerun strategy: rerun with the same source prefix and table.
+- Safe rerun strategy: rerun with `failedChunkKeys`.

@@ -114,14 +114,39 @@ Resources:
         Minify: false
         Target: es2020
 
+  BackfillSummarizeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs24.x
+      Handler: summarize.handler
+      CodeUri: .
+      Timeout: 60
+      MemorySize: 256
+      Policies:
+        - AWSLambdaBasicExecutionRole
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/summarize.ts
+        Minify: false
+        Target: es2020
+
   BackfillStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
       Type: STANDARD
       Definition:
         Comment: Backfill historical S3 partition metadata into Athena.
-        StartAt: RunPlanner
+        StartAt: DetermineChunkSource
         States:
+          DetermineChunkSource:
+            Type: Choice
+            Choices:
+              - Variable: $.chunkKeys[0]
+                IsPresent: true
+                Next: ProcessChunks
+            Default: RunPlanner
           RunPlanner:
             Type: Task
             Resource: arn:aws:states:::lambda:invoke
@@ -137,6 +162,7 @@ Resources:
           ProcessChunks:
             Type: Map
             ItemsPath: $.chunkKeys
+            ResultPath: $.chunkResults
             MaxConcurrency: !Ref MaxConcurrency
             ItemSelector:
               chunkKey.$: $$.Map.Item.Value
@@ -161,7 +187,35 @@ Resources:
                       table.$: $.table
                       outputLocation.$: $.outputLocation
                       workGroup.$: $.workGroup
+                  Next: ChunkSucceeded
+                  Catch:
+                    - ErrorEquals:
+                        - States.ALL
+                      ResultPath: $.error
+                      Next: ChunkFailed
+                ChunkSucceeded:
+                  Type: Pass
+                  Parameters:
+                    success: true
+                    chunkKey.$: $.chunkKey
+                    result.$: $
                   End: true
+                ChunkFailed:
+                  Type: Pass
+                  Parameters:
+                    success: false
+                    chunkKey.$: $.chunkKey
+                    error.$: $.error
+                  End: true
+            Next: SummarizeResults
+          SummarizeResults:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              FunctionName: !GetAtt BackfillSummarizeFunction.Arn
+              Payload:
+                chunkResults.$: $.chunkResults
             Next: Done
           Done:
             Type: Succeed
@@ -170,6 +224,8 @@ Resources:
             FunctionName: !Ref BackfillPlannerFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref BackfillWorkerFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref BackfillSummarizeFunction
 
 Outputs:
   BackfillStateMachineArn:
@@ -178,3 +234,5 @@ Outputs:
     Value: !GetAtt BackfillPlannerFunction.Arn
   BackfillWorkerFunctionArn:
     Value: !GetAtt BackfillWorkerFunction.Arn
+  BackfillSummarizeFunctionArn:
+    Value: !GetAtt BackfillSummarizeFunction.Arn
