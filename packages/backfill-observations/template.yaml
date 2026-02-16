@@ -1,0 +1,238 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: One-off backfill workflow to register historical S3 partitions in Athena.
+
+Parameters:
+  BackfillBucket:
+    Type: String
+    Default: weather-tempest-records
+    Description: Bucket containing historical observation records and where manifests/chunks are written.
+  BackfillScanPrefix:
+    Type: String
+    Default: ''
+    Description: Optional S3 prefix to limit the scan scope.
+  BackfillOutputPrefix:
+    Type: String
+    Default: backfill/athena-partitions
+    Description: Prefix where run manifests and partition chunks are stored.
+  AthenaDatabase:
+    Type: String
+    Default: tempest_weather
+  AthenaTable:
+    Type: String
+    Default: observations
+  AthenaOutputLocation:
+    Type: String
+    Default: s3://weather-tempest-records/queries/
+  AthenaWorkGroup:
+    Type: String
+    Default: primary
+  ChunkSize:
+    Type: Number
+    Default: 100
+  MaxConcurrency:
+    Type: Number
+    Default: 3
+
+Resources:
+  BackfillPlannerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs24.x
+      Handler: planner.handler
+      CodeUri: .
+      Timeout: 900
+      MemorySize: 512
+      Environment:
+        Variables:
+          BACKFILL_BUCKET: !Ref BackfillBucket
+          BACKFILL_SCAN_PREFIX: !Ref BackfillScanPrefix
+          BACKFILL_OUTPUT_PREFIX: !Ref BackfillOutputPrefix
+          BACKFILL_CHUNK_SIZE: !Ref ChunkSize
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:ListBucket
+              Resource: !Sub arn:aws:s3:::${BackfillBucket}
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+              Resource: !Sub arn:aws:s3:::${BackfillBucket}/*
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/planner.ts
+        Minify: false
+        Target: es2020
+
+  BackfillWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs24.x
+      Handler: worker.handler
+      CodeUri: .
+      Timeout: 900
+      MemorySize: 1024
+      Environment:
+        Variables:
+          BACKFILL_ATHENA_DATABASE: !Ref AthenaDatabase
+          BACKFILL_ATHENA_TABLE: !Ref AthenaTable
+          BACKFILL_ATHENA_OUTPUT: !Ref AthenaOutputLocation
+          BACKFILL_ATHENA_WORKGROUP: !Ref AthenaWorkGroup
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource: !Sub arn:aws:s3:::${BackfillBucket}/*
+            - Effect: Allow
+              Action:
+                - athena:StartQueryExecution
+                - athena:GetQueryExecution
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - glue:GetDatabase
+                - glue:GetDatabases
+                - glue:GetTable
+                - glue:GetTables
+                - glue:GetPartition
+                - glue:GetPartitions
+                - glue:CreatePartition
+                - glue:BatchCreatePartition
+              Resource: '*'
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/worker.ts
+        Minify: false
+        Target: es2020
+
+  BackfillSummarizeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs24.x
+      Handler: summarize.handler
+      CodeUri: .
+      Timeout: 60
+      MemorySize: 256
+      Policies:
+        - AWSLambdaBasicExecutionRole
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        EntryPoints:
+          - src/summarize.ts
+        Minify: false
+        Target: es2020
+
+  BackfillStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Type: STANDARD
+      Definition:
+        Comment: Backfill historical S3 partition metadata into Athena.
+        StartAt: DetermineChunkSource
+        States:
+          DetermineChunkSource:
+            Type: Choice
+            Choices:
+              - Variable: $.chunkKeys[0]
+                IsPresent: true
+                Next: ProcessChunks
+            Default: RunPlanner
+          RunPlanner:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              FunctionName: !GetAtt BackfillPlannerFunction.Arn
+              Payload:
+                bucket.$: $.bucket
+                prefix.$: $.prefix
+                outputPrefix.$: $.outputPrefix
+                chunkSize.$: $.chunkSize
+            Next: ProcessChunks
+          ProcessChunks:
+            Type: Map
+            ItemsPath: $.chunkKeys
+            ResultPath: $.chunkResults
+            MaxConcurrency: !Ref MaxConcurrency
+            ItemSelector:
+              chunkKey.$: $$.Map.Item.Value
+              bucket.$: $.bucket
+              database.$: $.database
+              table.$: $.table
+              outputLocation.$: $.outputLocation
+              workGroup.$: $.workGroup
+            ItemProcessor:
+              StartAt: RunWorker
+              States:
+                RunWorker:
+                  Type: Task
+                  Resource: arn:aws:states:::lambda:invoke
+                  OutputPath: $.Payload
+                  Parameters:
+                    FunctionName: !GetAtt BackfillWorkerFunction.Arn
+                    Payload:
+                      bucket.$: $.bucket
+                      chunkKey.$: $.chunkKey
+                      database.$: $.database
+                      table.$: $.table
+                      outputLocation.$: $.outputLocation
+                      workGroup.$: $.workGroup
+                  Next: ChunkSucceeded
+                  Catch:
+                    - ErrorEquals:
+                        - States.ALL
+                      ResultPath: $.error
+                      Next: ChunkFailed
+                ChunkSucceeded:
+                  Type: Pass
+                  Parameters:
+                    success: true
+                    chunkKey.$: $.chunkKey
+                    result.$: $
+                  End: true
+                ChunkFailed:
+                  Type: Pass
+                  Parameters:
+                    success: false
+                    chunkKey.$: $.chunkKey
+                    error.$: $.error
+                  End: true
+            Next: SummarizeResults
+          SummarizeResults:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              FunctionName: !GetAtt BackfillSummarizeFunction.Arn
+              Payload:
+                chunkResults.$: $.chunkResults
+            Next: Done
+          Done:
+            Type: Succeed
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref BackfillPlannerFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref BackfillWorkerFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref BackfillSummarizeFunction
+
+Outputs:
+  BackfillStateMachineArn:
+    Value: !Ref BackfillStateMachine
+  BackfillPlannerFunctionArn:
+    Value: !GetAtt BackfillPlannerFunction.Arn
+  BackfillWorkerFunctionArn:
+    Value: !GetAtt BackfillWorkerFunction.Arn
+  BackfillSummarizeFunctionArn:
+    Value: !GetAtt BackfillSummarizeFunction.Arn

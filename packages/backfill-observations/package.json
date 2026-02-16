@@ -1,0 +1,34 @@
+{
+  "name": "@weather/backfill-observations",
+  "version": "1.0.0",
+  "description": "Backfill historical weather observation partitions into Athena",
+  "main": "function/index.js",
+  "scripts": {
+    "build": "rimraf ./function && tsc -p tsconfig.lib.json",
+    "build:prod": "NODE_ENV=production npm run build",
+    "test": "node ../../node_modules/jest/bin/jest.js --passWithNoTests",
+    "test:coverage": "npm run test -- --coverage",
+    "lint": "eslint .",
+    "lint:fix": "npm run lint -- --fix",
+    "deploy": "npm run build --workspace=@weather/backfill-observations && mkdir -p ../../lib/nodejs && rm -rf ../../lib/nodejs/node_modules && cp -RL ../../node_modules ../../lib/nodejs && sam build --config-env prod && sam deploy --config-env prod",
+    "deploy:cleanup": "sam delete --config-env prod --no-prompts"
+  },
+  "author": "Sam Younger",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/jest": "*",
+    "@types/node": "*",
+    "@typescript-eslint/eslint-plugin": "*",
+    "@typescript-eslint/parser": "*",
+    "eslint": "*",
+    "jest": "*",
+    "rimraf": "*",
+    "ts-jest": "*",
+    "ts-node": "*",
+    "typescript": "*"
+  },
+  "peerDependencies": {
+    "@aws-sdk/client-athena": "*",
+    "@aws-sdk/client-s3": "*"
+  }
+}

@@ -27,6 +27,7 @@ describe('handler', () => {
     expect(subject.body).toEqual(JSON.stringify({
       readings: 2,
       insertCount: 2,
+      partitionStatus: { succeeded: 2, failed: 0 },
     }));
   });
 });

@@ -5,6 +5,7 @@
   "main": "index.js",
   "type": "module",
   "workspaces": [
+    "packages/backfill-observations",
     "packages/cloud-computing",
     "packages/fetch-observations",
     "packages/refine-observations",

@@ -10,6 +10,7 @@ export const DeviceObservationsService = jest.fn().mockImplementation(() => ({
         resolve({
           insertResult: [{ foo: 'bar' }, { foo: 'bar' }],
           reading: new DeviceObservationFactory().build(observations),
+          partitionStatus: { succeeded: 2, failed: 0 },
         });
       }, RESPONSE_DURATION);
     });

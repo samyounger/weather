@@ -12,7 +12,7 @@ export const handler = async (_event: APIGatewayProxyEvent): Promise<APIGatewayP
   return {
     statusCode: 200,
     body: JSON.stringify({
-      message: refinementSummary.inserted
+      message: refinementSummary.inserted > 0
         ? 'Observations refined successfully'
         : 'Observations were already refined for target date',
       date: refinementSummary.date,

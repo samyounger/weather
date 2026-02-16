@@ -21,7 +21,14 @@ describe('DeviceObservationsService', () => {
   const service = new DeviceObservationsService(observationsService, database as unknown as Database);
 
   describe('fetchAndInsertReading', () => {
-    let subject:  { insertResult: PromiseSettledResult<PutObjectCommandOutput>[], reading: Device };
+    let subject: {
+      insertResult: PromiseSettledResult<PutObjectCommandOutput>[];
+      reading: Device;
+      partitionStatus: {
+        succeeded: number;
+        failed: number;
+      };
+    };
 
     beforeEach(async () => {
       addObservationsPartitionMock.mockReset();
@@ -74,15 +81,17 @@ describe('DeviceObservationsService', () => {
       ]);
     });
 
-    it('should return an object with insertCount and reading properties', () => {
+    it('should return an object with insertCount, reading and partitionStatus properties', () => {
       expect(subject).toHaveProperty('insertResult');
       expect(subject).toHaveProperty('reading');
+      expect(subject).toHaveProperty('partitionStatus');
     });
 
     it('should add an athena partition for each hour with observations', () => {
       expect(database.addObservationsPartition).toHaveBeenNthCalledWith(1, '2024', '08', '05', '22');
       expect(database.addObservationsPartition).toHaveBeenNthCalledWith(2, '2040', '06', '09', '23');
       expect(database.addObservationsPartition).toHaveBeenCalledTimes(2);
+      expect(subject.partitionStatus).toEqual({ succeeded: 2, failed: 0 });
       expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 2, failed: 0 });
     });
 
