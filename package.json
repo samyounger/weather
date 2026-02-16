@@ -24,6 +24,7 @@
   "author": "Sam Younger",
   "license": "ISC",
   "devDependencies": {
+    "esbuild": "^0.27.3",
     "@eslint/js": "^9.9.1",
     "@types/aws-lambda": "^8.10.145",
     "@types/jest": "^29.5.12",
