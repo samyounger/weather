@@ -85,6 +85,20 @@ Resources:
               Resource: !Sub arn:aws:s3:::${BackfillBucket}/*
             - Effect: Allow
               Action:
+                - s3:GetBucketLocation
+                - s3:ListBucket
+                - s3:ListBucketMultipartUploads
+              Resource: !Sub arn:aws:s3:::${BackfillBucket}
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:PutObjectAcl
+                - s3:GetObject
+                - s3:AbortMultipartUpload
+                - s3:ListMultipartUploadParts
+              Resource: !Sub arn:aws:s3:::${BackfillBucket}/queries/*
+            - Effect: Allow
+              Action:
                 - athena:StartQueryExecution
                 - athena:GetQueryExecution
               Resource: '*'
