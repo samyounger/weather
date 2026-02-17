@@ -46,6 +46,10 @@ Resources:
           BACKFILL_SCAN_PREFIX: !Ref BackfillScanPrefix
           BACKFILL_OUTPUT_PREFIX: !Ref BackfillOutputPrefix
           BACKFILL_CHUNK_SIZE: !Ref ChunkSize
+          BACKFILL_ATHENA_DATABASE: !Ref AthenaDatabase
+          BACKFILL_ATHENA_TABLE: !Ref AthenaTable
+          BACKFILL_ATHENA_OUTPUT: !Ref AthenaOutputLocation
+          BACKFILL_ATHENA_WORKGROUP: !Ref AthenaWorkGroup
       Policies:
         - AWSLambdaBasicExecutionRole
         - Statement:
