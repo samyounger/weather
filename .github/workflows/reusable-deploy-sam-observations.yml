@@ -1,0 +1,110 @@
+name: Reusable Deploy SAM Observations
+
+on:
+  workflow_call:
+    inputs:
+      checkout_ref:
+        required: true
+        type: string
+      package_workspace:
+        required: true
+        type: string
+      package_directory:
+        required: true
+        type: string
+      artifact_bucket:
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+
+      - name: Validate deploy variables are configured
+        run: |
+          if [ -z "${{ vars.AWS_IAM_DEPLOY_ROLE_ARN }}" ]; then
+            echo "Repository variable AWS_IAM_DEPLOY_ROLE_ARN must be set."
+            exit 1
+          fi
+          if [ -z "${{ vars.ALERT_EMAIL }}" ]; then
+            echo "Repository variable ALERT_EMAIL must be set."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_IAM_DEPLOY_ROLE_ARN }}
+          aws-region: eu-west-2
+
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ensure artifact bucket and lifecycle policy
+        env:
+          ARTIFACT_BUCKET: ${{ inputs.artifact_bucket }}
+          AWS_REGION: eu-west-2
+        run: |
+          if ! aws s3api head-bucket --bucket "$ARTIFACT_BUCKET" 2>/dev/null; then
+            aws s3api create-bucket \
+              --bucket "$ARTIFACT_BUCKET" \
+              --region "$AWS_REGION" \
+              --create-bucket-configuration LocationConstraint="$AWS_REGION"
+          fi
+
+          aws s3api put-bucket-lifecycle-configuration \
+            --bucket "$ARTIFACT_BUCKET" \
+            --lifecycle-configuration '{
+              "Rules": [
+                {
+                  "ID": "ExpireSamArtifactsAfter30Days",
+                  "Status": "Enabled",
+                  "Filter": { "Prefix": "" },
+                  "Expiration": { "Days": 30 },
+                  "NoncurrentVersionExpiration": { "NoncurrentDays": 30 }
+                }
+              ]
+            }'
+
+      - name: Build function and shared layer artifacts
+        run: |
+          npm run build --workspace=@weather/cloud-computing
+          npm run build --workspace=${{ inputs.package_workspace }}
+          npm prune --omit=dev
+          mkdir -p lib/nodejs
+          rm -rf lib/nodejs/node_modules
+          cp -RL node_modules lib/nodejs
+          if [ -d lib/nodejs/node_modules/@weather ]; then find lib/nodejs/node_modules/@weather -mindepth 1 -maxdepth 1 ! -name cloud-computing -exec rm -rf {} +; fi
+
+      - name: Build SAM application
+        working-directory: ${{ inputs.package_directory }}
+        run: sam build --config-env prod
+
+      - name: Deploy SAM application
+        working-directory: ${{ inputs.package_directory }}
+        env:
+          TEMPEST_HOST: ${{ vars.TEMPEST_HOST }}
+          TEMPEST_TOKEN: ${{ secrets.TEMPEST_TOKEN }}
+          TEMPEST_DEVICE_ID: ${{ vars.TEMPEST_DEVICE_ID }}
+          TEMPEST_STATION_ID: ${{ vars.TEMPEST_STATION_ID }}
+          ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+        run: |
+          sam deploy --config-env prod \
+            --parameter-overrides \
+              TempestHost=$TEMPEST_HOST \
+              TempestToken=$TEMPEST_TOKEN \
+              TempestDeviceId=$TEMPEST_DEVICE_ID \
+              TempestStationId=$TEMPEST_STATION_ID \
+              AlertEmail=$ALERT_EMAIL

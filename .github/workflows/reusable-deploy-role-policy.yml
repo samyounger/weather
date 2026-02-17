@@ -1,0 +1,41 @@
+name: Reusable Deploy Role Policy
+
+on:
+  workflow_call:
+    inputs:
+      checkout_ref:
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+
+      - name: Validate IAM deploy role variable is configured
+        run: |
+          if [ -z "${{ vars.AWS_IAM_DEPLOY_ROLE_ARN }}" ]; then
+            echo "Repository variable AWS_IAM_DEPLOY_ROLE_ARN must be set."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_IAM_DEPLOY_ROLE_ARN }}
+          aws-region: eu-west-2
+
+      - name: Deploy role policy stack
+        run: |
+          aws cloudformation deploy \
+            --stack-name tempest-github-cfn-deploy-role \
+            --template-file infra/github-tempest-cfn-deploy-role/template.yaml \
+            --capabilities CAPABILITY_NAMED_IAM
