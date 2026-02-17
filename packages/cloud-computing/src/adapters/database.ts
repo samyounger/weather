@@ -121,7 +121,14 @@ export class Database {
 
       const state = await this.waitForQuery(queryId);
       return state === QueryExecutionState.SUCCEEDED;
-    } catch {
+    } catch (error) {
+      console.error('Failed to add observations partition', {
+        year,
+        month,
+        day,
+        hour,
+        error,
+      });
       return false;
     }
   }
