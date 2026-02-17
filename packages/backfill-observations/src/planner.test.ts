@@ -97,6 +97,10 @@ describe('backfill planner', () => {
       totalPartitions: 0,
       totalChunks: 0,
       chunkKeys: [],
+      database: 'tempest_weather',
+      table: 'observations',
+      outputLocation: 's3://weather-tempest-records/queries/',
+      workGroup: 'primary',
     });
 
     const listCommand = sendMock.mock.calls[0][0] as ListObjectsV2Command;
