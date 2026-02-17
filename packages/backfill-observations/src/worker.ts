@@ -104,52 +104,87 @@ export const handler = async (event: WorkerInput): Promise<WorkerOutput> => {
   const outputLocation = event.outputLocation || DEFAULT_OUTPUT_LOCATION;
   const workGroup = event.workGroup || DEFAULT_WORK_GROUP;
 
-  const partitions = await loadChunk(event.bucket, event.chunkKey);
-  const query = buildAddPartitionsQuery(table, partitions);
-
-  const startResponse = await athenaClient.send(new StartQueryExecutionCommand({
-    QueryString: query,
-    QueryExecutionContext: {
-      Database: database,
-      Catalog: 'AwsDataCatalog',
-    },
-    ResultConfiguration: {
-      OutputLocation: outputLocation,
-      EncryptionConfiguration: {
-        EncryptionOption: 'SSE_S3',
-      },
-      AclConfiguration: {
-        S3AclOption: 'BUCKET_OWNER_FULL_CONTROL',
-      },
-    },
-    WorkGroup: workGroup,
-    ResultReuseConfiguration: {
-      ResultReuseByAgeConfiguration: {
-        Enabled: false,
-      },
-    },
-  }));
-
-  const queryExecutionId = startResponse.QueryExecutionId;
-  if (!queryExecutionId) {
-    throw new Error('Failed to start Athena query');
-  }
-
-  const queryState = await waitForQuery(queryExecutionId);
-  const failed = queryState === QueryExecutionState.SUCCEEDED ? 0 : partitions.length;
-  const succeeded = queryState === QueryExecutionState.SUCCEEDED ? partitions.length : 0;
-
-  if (queryState !== QueryExecutionState.SUCCEEDED) {
-    throw new Error(`Athena query ${queryExecutionId} failed with state: ${queryState}`);
-  }
-
-  return {
+  console.info('backfill worker started', {
+    service: 'backfill-observations',
     bucket: event.bucket,
     chunkKey: event.chunkKey,
-    attempted: partitions.length,
-    succeeded,
-    failed,
-    queryExecutionId,
-    queryState,
-  };
+    database,
+    table,
+    outputLocation,
+    workGroup,
+  });
+
+  try {
+    const partitions = await loadChunk(event.bucket, event.chunkKey);
+    const query = buildAddPartitionsQuery(table, partitions);
+
+    const startResponse = await athenaClient.send(new StartQueryExecutionCommand({
+      QueryString: query,
+      QueryExecutionContext: {
+        Database: database,
+        Catalog: 'AwsDataCatalog',
+      },
+      ResultConfiguration: {
+        OutputLocation: outputLocation,
+        EncryptionConfiguration: {
+          EncryptionOption: 'SSE_S3',
+        },
+        AclConfiguration: {
+          S3AclOption: 'BUCKET_OWNER_FULL_CONTROL',
+        },
+      },
+      WorkGroup: workGroup,
+      ResultReuseConfiguration: {
+        ResultReuseByAgeConfiguration: {
+          Enabled: false,
+        },
+      },
+    }));
+
+    const queryExecutionId = startResponse.QueryExecutionId;
+    if (!queryExecutionId) {
+      throw new Error('Failed to start Athena query');
+    }
+
+    const queryState = await waitForQuery(queryExecutionId);
+    const failed = queryState === QueryExecutionState.SUCCEEDED ? 0 : partitions.length;
+    const succeeded = queryState === QueryExecutionState.SUCCEEDED ? partitions.length : 0;
+
+    if (queryState !== QueryExecutionState.SUCCEEDED) {
+      throw new Error(`Athena query ${queryExecutionId} failed with state: ${queryState}`);
+    }
+
+    console.info('backfill worker completed', {
+      service: 'backfill-observations',
+      bucket: event.bucket,
+      chunkKey: event.chunkKey,
+      attempted: partitions.length,
+      succeeded,
+      failed,
+      queryExecutionId,
+      queryState,
+    });
+
+    return {
+      bucket: event.bucket,
+      chunkKey: event.chunkKey,
+      attempted: partitions.length,
+      succeeded,
+      failed,
+      queryExecutionId,
+      queryState,
+    };
+  } catch (error) {
+    console.error('backfill worker failed', {
+      service: 'backfill-observations',
+      bucket: event.bucket,
+      chunkKey: event.chunkKey,
+      database,
+      table,
+      outputLocation,
+      workGroup,
+      error,
+    });
+    throw error;
+  }
 };

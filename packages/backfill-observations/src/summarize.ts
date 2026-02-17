@@ -38,11 +38,21 @@ export const handler = async (event: SummarizeInput): Promise<SummarizeOutput> =
     .filter((result): result is WorkerSuccess => result.success)
     .map((result) => result.chunkKey);
 
-  return {
+  const summary = {
     totalChunks: chunkResults.length,
     succeededChunks: succeededChunkKeys.length,
     failedChunks: failedChunkKeys.length,
     failedChunkKeys,
     succeededChunkKeys,
   };
+
+  console.info('backfill summarize completed', {
+    service: 'backfill-observations',
+    totalChunks: summary.totalChunks,
+    succeededChunks: summary.succeededChunks,
+    failedChunks: summary.failedChunks,
+    failedChunkSample: failedChunkKeys.slice(0, 10),
+  });
+
+  return summary;
 };

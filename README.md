@@ -70,6 +70,34 @@ If you are using [AWS SSO](https://aws.amazon.com/blogs/security/how-to-configur
 - Use raw `observations` for short, high-detail windows.
 - Use `observations_refined_15m` for broader date ranges to significantly reduce Athena scan size and latency.
 
+An example query to get daily average temperature for January 2024:
+
+```sql
+SELECT
+  date_trunc('day', timestamp) AS day,
+  AVG(temperature) AS avg_temp
+FROM
+  "weather-tempest-records"."observations_refined_15m"
+WHERE
+  timestamp >= TIMESTAMP '2024-01-01 00:00:00'
+  AND timestamp < TIMESTAMP '2024-02-01 00:00:00'
+GROUP BY
+  date_trunc('day', timestamp)
+ORDER BY
+  day;
+```
+
+An example query to get raw observations for January 1, 2024:
+
+```sql
+SELECT datetime FROM observations
+WHERE year='2026'
+  AND month>='01' AND month<='03'
+  AND day>='01' AND day<='02'
+  AND hour>='01' AND hour<='02'
+ORDER BY datetime DESC LIMIT 500;
+```
+
 ## Environment variables
 
 The following environment variables are required for the source code, as provided in a .env file at root of the project. The application uses the [dotenv](https://github.com/motdotla/dotenv) module to make these variables available in the source code, example `process.env.NODE_ENV`.
