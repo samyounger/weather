@@ -40,6 +40,7 @@ Conditions:
 Resources:
   AlertsTopic:
     Type: AWS::SNS::Topic
+    Condition: HasAlertEmail
     Properties:
       TopicName: !Sub "${AWS::StackName}-alerts"
   AlertsTopicSubscription:
@@ -51,6 +52,7 @@ Resources:
       Endpoint: !Ref AlertEmail
   AlertsTopicPolicy:
     Type: AWS::SNS::TopicPolicy
+    Condition: HasAlertEmail
     Properties:
       Topics:
         - !Ref AlertsTopic
@@ -275,6 +277,7 @@ Resources:
             FunctionName: !Ref BackfillSummarizeFunction
   BackfillExecutionStatusEventRule:
     Type: AWS::Events::Rule
+    Condition: HasAlertEmail
     Properties:
       Description: Notify when backfill execution fails, times out, or is aborted.
       EventPattern:
@@ -294,6 +297,7 @@ Resources:
           Id: BackfillExecutionStatusAlertTarget
   BackfillPlannerErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
     Properties:
       AlarmDescription: !Sub "Lambda ${BackfillPlannerFunction} reported errors."
       Namespace: AWS/Lambda
@@ -312,6 +316,7 @@ Resources:
         - !Ref AlertsTopic
   BackfillWorkerErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
     Properties:
       AlarmDescription: !Sub "Lambda ${BackfillWorkerFunction} reported errors."
       Namespace: AWS/Lambda
@@ -330,6 +335,7 @@ Resources:
         - !Ref AlertsTopic
   BackfillSummarizeErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
     Properties:
       AlarmDescription: !Sub "Lambda ${BackfillSummarizeFunction} reported errors."
       Namespace: AWS/Lambda
@@ -348,6 +354,7 @@ Resources:
         - !Ref AlertsTopic
   BackfillWorkerThrottlesAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
     Properties:
       AlarmDescription: !Sub "Lambda ${BackfillWorkerFunction} reported throttles."
       Namespace: AWS/Lambda
@@ -366,6 +373,7 @@ Resources:
         - !Ref AlertsTopic
   BackfillExecutionsFailedAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
     Properties:
       AlarmDescription: Backfill Step Functions execution failed.
       Namespace: AWS/States
@@ -384,6 +392,7 @@ Resources:
         - !Ref AlertsTopic
   BackfillExecutionsTimedOutAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
     Properties:
       AlarmDescription: Backfill Step Functions execution timed out.
       Namespace: AWS/States
@@ -402,6 +411,7 @@ Resources:
         - !Ref AlertsTopic
   BackfillExecutionsAbortedAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
     Properties:
       AlarmDescription: Backfill Step Functions execution aborted.
       Namespace: AWS/States
@@ -421,6 +431,7 @@ Resources:
 
 Outputs:
   AlertsTopicArn:
+    Condition: HasAlertEmail
     Value: !Ref AlertsTopic
   BackfillStateMachineArn:
     Value: !Ref BackfillStateMachine

@@ -23,6 +23,7 @@ Conditions:
 Resources:
   AlertsTopic:
     Type: AWS::SNS::Topic
+    Condition: HasAlertEmail
     Properties:
       TopicName: !Sub "${AWS::StackName}-alerts"
   AlertsTopicSubscription:
@@ -34,6 +35,7 @@ Resources:
       Endpoint: !Ref AlertEmail
   AlertsTopicPolicy:
     Type: AWS::SNS::TopicPolicy
+    Condition: HasAlertEmail
     Properties:
       Topics:
         - !Ref AlertsTopic
@@ -135,6 +137,7 @@ Resources:
         - nodejs24.x
   TempestLambdaErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
     Properties:
       AlarmDescription: !Sub "Lambda ${TempestLambdaFunction} reported errors."
       Namespace: AWS/Lambda
@@ -153,6 +156,7 @@ Resources:
         - !Ref AlertsTopic
   TempestLambdaThrottlesAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
     Properties:
       AlarmDescription: !Sub "Lambda ${TempestLambdaFunction} reported throttles."
       Namespace: AWS/Lambda
@@ -171,6 +175,7 @@ Resources:
         - !Ref AlertsTopic
   TempestLambdaDurationAlarm:
     Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
     Properties:
       AlarmDescription: !Sub "Lambda ${TempestLambdaFunction} duration exceeded 48s."
       Namespace: AWS/Lambda
@@ -189,4 +194,5 @@ Resources:
         - !Ref AlertsTopic
 Outputs:
   AlertsTopicArn:
+    Condition: HasAlertEmail
     Value: !Ref AlertsTopic
