@@ -3,7 +3,7 @@ name: Deploy Tempest Weather Fetch Lib
 on:
   workflow_run:
     workflows:
-      - Automation-Tests
+      - Deploy GitHub Tempest Cfn Role
     branches:
       - main
     types:

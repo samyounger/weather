@@ -3,7 +3,7 @@ name: Deploy Tempest Weather Backfill Lib
 on:
   workflow_run:
     workflows:
-      - Automation-Tests
+      - Deploy GitHub Tempest Cfn Role
     branches:
       - main
     types:

@@ -1,0 +1,295 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Manages the inline IAM policy for GitHubTempestCfnDeployRole so deployment
+  permissions are versioned in code.
+
+Parameters:
+  DeployRoleName:
+    Type: String
+    Default: GitHubTempestCfnDeployRole
+    Description: Existing IAM role used by GitHub Actions for SAM/CloudFormation deploys.
+  ArtifactAccountId:
+    Type: String
+    Default: '926898703023'
+    Description: AWS account ID where weather deployment stacks are managed.
+  ArtifactRegion:
+    Type: String
+    Default: eu-west-2
+    Description: AWS region for deployed stacks and artifacts.
+
+Resources:
+  GitHubTempestCfnDeployRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: GitHubTempestCfnDeployRolePolicy
+      Roles:
+        - !Ref DeployRoleName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudFormationForSamDeploy
+            Effect: Allow
+            Action:
+              - cloudformation:CreateStack
+              - cloudformation:UpdateStack
+              - cloudformation:DeleteStack
+              - cloudformation:CreateChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackEvents
+              - cloudformation:DescribeStackResources
+              - cloudformation:GetTemplateSummary
+              - cloudformation:GetTemplate
+              - cloudformation:ValidateTemplate
+            Resource:
+              - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-store-lib/*
+              - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-fetch-lib/*
+              - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-refine-lib/*
+              - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-backfill-lib/*
+              - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/aws-sam-cli-managed-default/*
+          - Sid: CloudFormationSamTransform
+            Effect: Allow
+            Action:
+              - cloudformation:CreateChangeSet
+            Resource: !Sub arn:aws:cloudformation:${ArtifactRegion}:aws:transform/Serverless-2016-10-31
+          - Sid: SamManagedArtifactBucketAccess
+            Effect: Allow
+            Action:
+              - s3:CreateBucket
+              - s3:DeleteBucket
+              - s3:TagResource
+              - s3:UntagResource
+              - s3:PutBucketTagging
+              - s3:GetBucketTagging
+              - s3:GetBucketLocation
+              - s3:ListBucket
+              - s3:ListBucketVersions
+              - s3:PutBucketPolicy
+              - s3:GetBucketPolicy
+              - s3:DeleteBucketPolicy
+              - s3:PutBucketAcl
+              - s3:GetBucketAcl
+              - s3:PutBucketPublicAccessBlock
+              - s3:GetBucketPublicAccessBlock
+              - s3:PutBucketVersioning
+              - s3:GetBucketVersioning
+              - s3:PutEncryptionConfiguration
+              - s3:GetEncryptionConfiguration
+              - s3:PutBucketOwnershipControls
+              - s3:GetBucketOwnershipControls
+              - s3:PutObject
+              - s3:GetObject
+              - s3:DeleteObject
+              - s3:DeleteObjectVersion
+              - s3:AbortMultipartUpload
+              - s3:ListBucketMultipartUploads
+              - s3:ListMultipartUploadParts
+            Resource:
+              - arn:aws:s3:::aws-sam-cli-managed-default-*
+              - arn:aws:s3:::aws-sam-cli-managed-default-*/*
+          - Sid: LambdaForTempestApp
+            Effect: Allow
+            Action:
+              - lambda:CreateFunction
+              - lambda:UpdateFunctionCode
+              - lambda:UpdateFunctionConfiguration
+              - lambda:DeleteFunction
+              - lambda:CreateFunctionUrlConfig
+              - lambda:UpdateFunctionUrlConfig
+              - lambda:DeleteFunctionUrlConfig
+              - lambda:AddPermission
+              - lambda:RemovePermission
+              - lambda:PublishLayerVersion
+              - lambda:DeleteLayerVersion
+              - lambda:GetLayerVersion
+              - lambda:TagResource
+              - lambda:UntagResource
+              - lambda:ListTags
+              - lambda:GetFunction
+              - lambda:GetFunctionConfiguration
+            Resource:
+              - !Sub arn:aws:lambda:${ArtifactRegion}:${ArtifactAccountId}:function:tempest-*
+              - !Sub arn:aws:lambda:${ArtifactRegion}:${ArtifactAccountId}:layer:tempest-*
+              - !Sub arn:aws:lambda:${ArtifactRegion}:${ArtifactAccountId}:layer:tempest-*:*
+          - Sid: IAMManagedPolicyForTempest
+            Effect: Allow
+            Action:
+              - iam:CreatePolicy
+              - iam:CreatePolicyVersion
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+              - iam:ListPolicyVersions
+            Resource:
+              - !Sub arn:aws:iam::${ArtifactAccountId}:policy/Tempest*
+              - !Sub arn:aws:iam::${ArtifactAccountId}:policy/tempest-*
+          - Sid: PassExecutionRoleForLambda
+            Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource:
+              - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-store-*
+              - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-fetch-*
+              - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-refine-*
+              - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-backfill-*
+            Condition:
+              StringEquals:
+                iam:PassedToService:
+                  - lambda.amazonaws.com
+                  - states.amazonaws.com
+          - Sid: GlueForTempestDatabaseAndTable
+            Effect: Allow
+            Action:
+              - glue:CreateDatabase
+              - glue:DeleteDatabase
+              - glue:CreateTable
+              - glue:DeleteTable
+              - glue:UpdateTable
+              - glue:GetDatabase
+              - glue:GetDatabases
+              - glue:GetTable
+              - glue:GetTables
+              - glue:GetPartition
+              - glue:GetPartitions
+              - glue:CreatePartition
+              - glue:BatchCreatePartition
+            Resource:
+              - !Sub arn:aws:glue:${ArtifactRegion}:${ArtifactAccountId}:catalog
+              - !Sub arn:aws:glue:${ArtifactRegion}:${ArtifactAccountId}:database/tempest_weather
+              - !Sub arn:aws:glue:${ArtifactRegion}:${ArtifactAccountId}:table/tempest_weather/observations
+              - !Sub arn:aws:glue:${ArtifactRegion}:${ArtifactAccountId}:table/tempest_weather/observations_refined_15m
+          - Sid: AthenaIfStackNeedsIt
+            Effect: Allow
+            Action:
+              - athena:StartQueryExecution
+              - athena:GetQueryExecution
+              - athena:GetQueryResults
+            Resource: '*'
+          - Sid: ReadLambdaExecutionRolesForDeploy
+            Effect: Allow
+            Action:
+              - iam:GetRole
+            Resource:
+              - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-store-*
+              - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-fetch-*
+              - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-refine-*
+              - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-backfill-*
+          - Sid: ReadLegacyArtifactBuckets
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+            Resource:
+              - arn:aws:s3:::tempest-artifacts-store-*
+              - arn:aws:s3:::tempest-artifacts-store-*/*
+              - arn:aws:s3:::tempest-artifacts-fetch-*
+              - arn:aws:s3:::tempest-artifacts-fetch-*/*
+              - arn:aws:s3:::tempest-artifacts-refine-*
+              - arn:aws:s3:::tempest-artifacts-refine-*/*
+          - Sid: FixedArtifactBucketsAccess
+            Effect: Allow
+            Action:
+              - s3:CreateBucket
+              - s3:GetBucketLocation
+              - s3:ListBucket
+              - s3:PutLifecycleConfiguration
+              - s3:GetLifecycleConfiguration
+              - s3:PutObject
+              - s3:GetObject
+              - s3:DeleteObject
+              - s3:AbortMultipartUpload
+              - s3:ListBucketMultipartUploads
+              - s3:ListMultipartUploadParts
+            Resource:
+              - arn:aws:s3:::tempest-artifacts-store-prod*
+              - arn:aws:s3:::tempest-artifacts-store-prod*/*
+              - arn:aws:s3:::tempest-artifacts-fetch-prod*
+              - arn:aws:s3:::tempest-artifacts-fetch-prod*/*
+              - arn:aws:s3:::tempest-artifacts-refine-prod*
+              - arn:aws:s3:::tempest-artifacts-refine-prod*/*
+              - arn:aws:s3:::tempest-artifacts-backfill-prod*
+              - arn:aws:s3:::tempest-artifacts-backfill-prod*/*
+          - Sid: EventBridgeRuleForTempest
+            Effect: Allow
+            Action:
+              - events:PutRule
+              - events:DeleteRule
+              - events:DescribeRule
+              - events:PutTargets
+              - events:RemoveTargets
+              - events:TagResource
+              - events:UntagResource
+              - events:ListTagsForResource
+            Resource: !Sub arn:aws:events:${ArtifactRegion}:${ArtifactAccountId}:rule/tempest-weather-*
+          - Sid: IAMRoleForTempestLambdaExecution
+            Effect: Allow
+            Action:
+              - iam:CreateRole
+              - iam:DeleteRole
+              - iam:GetRole
+              - iam:GetRolePolicy
+              - iam:UpdateRole
+              - iam:UpdateAssumeRolePolicy
+              - iam:TagRole
+              - iam:UntagRole
+              - iam:AttachRolePolicy
+              - iam:DetachRolePolicy
+              - iam:PutRolePolicy
+              - iam:DeleteRolePolicy
+              - iam:ListRolePolicies
+              - iam:ListAttachedRolePolicies
+              - sts:AssumeRole
+            Resource:
+              - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-store-*
+              - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-fetch-*
+              - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-refine-*
+              - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-backfill-*
+          - Sid: StepFunctionPermissions
+            Effect: Allow
+            Action:
+              - states:CreateStateMachine
+              - states:UpdateStateMachine
+              - states:DeleteStateMachine
+              - states:DescribeStateMachine
+              - states:ListTagsForResource
+              - states:TagResource
+              - states:UntagResource
+            Resource:
+              - !Sub arn:aws:states:${ArtifactRegion}:${ArtifactAccountId}:stateMachine:tempest-weather-backfill-*
+              - !Sub arn:aws:states:${ArtifactRegion}:${ArtifactAccountId}:stateMachine:BackfillStateMachine-*
+          - Sid: SnsAlertsForTempestStacks
+            Effect: Allow
+            Action:
+              - sns:CreateTopic
+              - sns:DeleteTopic
+              - sns:GetTopicAttributes
+              - sns:SetTopicAttributes
+              - sns:Subscribe
+              - sns:Unsubscribe
+              - sns:GetSubscriptionAttributes
+              - sns:SetSubscriptionAttributes
+              - sns:ListSubscriptionsByTopic
+              - sns:TagResource
+              - sns:UntagResource
+              - sns:ListTagsForResource
+            Resource:
+              - !Sub arn:aws:sns:${ArtifactRegion}:${ArtifactAccountId}:tempest-weather-store-lib-alerts
+              - !Sub arn:aws:sns:${ArtifactRegion}:${ArtifactAccountId}:tempest-weather-fetch-lib-alerts
+              - !Sub arn:aws:sns:${ArtifactRegion}:${ArtifactAccountId}:tempest-weather-refine-lib-alerts
+              - !Sub arn:aws:sns:${ArtifactRegion}:${ArtifactAccountId}:tempest-weather-backfill-lib-alerts
+          - Sid: CloudWatchAlarmsForTempestStacks
+            Effect: Allow
+            Action:
+              - cloudwatch:PutMetricAlarm
+              - cloudwatch:DeleteAlarms
+              - cloudwatch:DescribeAlarms
+              - cloudwatch:TagResource
+              - cloudwatch:UntagResource
+              - cloudwatch:ListTagsForResource
+            Resource: '*'
+
+Outputs:
+  DeployRoleName:
+    Value: !Ref DeployRoleName
