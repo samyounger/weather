@@ -29,10 +29,12 @@ Parameters:
     Default: primary
   ChunkSize:
     Type: Number
-    Default: 100
+    Default: "100"
   MaxConcurrency:
     Type: Number
-    Default: 3
+    Default: "3"
+    MinValue: "1"
+    Description: "Maximum number of concurrent chunk workers (must be an integer >= 1)"
 
 Resources:
   BackfillPlannerFunction:
