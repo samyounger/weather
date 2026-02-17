@@ -54,9 +54,17 @@ export class DeviceObservationsService {
         if (result) {
           succeeded += 1;
         } else {
+          console.error('Athena partition update returned unsuccessful result', { year, month, day, hour });
           failed += 1;
         }
-      } catch {
+      } catch (error) {
+        console.error('Athena partition update threw error', {
+          year,
+          month,
+          day,
+          hour,
+          error,
+        });
         failed += 1;
       }
     }

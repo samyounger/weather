@@ -9,41 +9,53 @@ dotEnv.config({ path:'../../.env' });
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const parameters = event.queryStringParameters as QueryStringParams;
+  console.info('fetch-observations invocation started', {
+    service: 'fetch-observations',
+    parameters,
+  });
+  try {
+    const queryStringParamValidator = new QueryStringParamValidator(parameters);
+    if (!queryStringParamValidator.valid()) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: queryStringParamValidator.returnError() }),
+      };
+    }
 
-  const queryStringParamValidator = new QueryStringParamValidator(parameters);
-  if (!queryStringParamValidator.valid()) {
+    const databaseService = new Database();
+    const queryPreparation = new QueryPreparation(databaseService, parameters);
+    const queryPreparationValid = await queryPreparation.valid();
+    if (!queryPreparationValid) {
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: queryPreparation.responseText() }),
+      };
+    }
+
+    const queryResults = await databaseService
+      .getResults(queryPreparation.queryResponse.QueryExecutionId as string)
+      .then(ObservationsFactory.build);
+
+    if (!queryResults || !queryResults[0]) {
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ error: 'Failed to retrieve Athena query results' }),
+      };
+    }
+
     return {
-      statusCode: 400,
-      body: JSON.stringify({ error: queryStringParamValidator.returnError() }),
+      statusCode: 200,
+      body: JSON.stringify({
+        parameters: event.queryStringParameters,
+        data: queryResults
+      }),
     };
+  } catch (error) {
+    console.error('fetch-observations invocation failed', {
+      service: 'fetch-observations',
+      parameters,
+      error,
+    });
+    throw error;
   }
-
-  const databaseService = new Database();
-  const queryPreparation = new QueryPreparation(databaseService, parameters);
-  const queryPreparationValid = await queryPreparation.valid();
-  if (!queryPreparationValid) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: queryPreparation.responseText() }),
-    };
-  }
-
-  const queryResults = await databaseService
-    .getResults(queryPreparation.queryResponse.QueryExecutionId as string)
-    .then(ObservationsFactory.build);
-
-  if (!queryResults || !queryResults[0]) {
-    return {
-      statusCode: 500,
-      body: JSON.stringify({ error: 'Failed to retrieve Athena query results' }),
-    };
-  }
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      parameters: event.queryStringParameters,
-      data: queryResults
-    }),
-  };
 };

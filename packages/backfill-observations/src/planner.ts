@@ -108,6 +108,13 @@ const parsePartition = (partition: string): Partition => {
 };
 
 export const handler = async (event: PlannerInput = {}): Promise<PlannerOutput> => {
+  console.info('backfill planner started', {
+    service: 'backfill-observations',
+    bucket: event.bucket || DEFAULT_BUCKET,
+    prefix: event.prefix ?? DEFAULT_PREFIX,
+    chunkSize: event.chunkSize || DEFAULT_CHUNK_SIZE,
+    outputPrefix: event.outputPrefix || DEFAULT_OUTPUT_PREFIX,
+  });
   const bucket = event.bucket || DEFAULT_BUCKET;
   const prefix = event.prefix ?? DEFAULT_PREFIX;
   const outputPrefix = event.outputPrefix || DEFAULT_OUTPUT_PREFIX;
@@ -149,7 +156,7 @@ export const handler = async (event: PlannerInput = {}): Promise<PlannerOutput> 
     chunkKeys,
   });
 
-  return {
+  const summary = {
     bucket,
     outputPrefix,
     manifestKey,
@@ -162,4 +169,13 @@ export const handler = async (event: PlannerInput = {}): Promise<PlannerOutput> 
     outputLocation,
     workGroup,
   };
+  console.info('backfill planner completed', {
+    service: 'backfill-observations',
+    bucket: summary.bucket,
+    totalPartitions: summary.totalPartitions,
+    totalChunks: summary.totalChunks,
+    manifestKey: summary.manifestKey,
+  });
+
+  return summary;
 };
