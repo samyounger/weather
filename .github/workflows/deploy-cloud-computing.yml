@@ -13,8 +13,43 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  detect-changes:
     if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.filter.outputs.should_deploy }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+
+      - name: Determine whether cloud-computing deploy is required
+        id: filter
+        run: |
+          if ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only HEAD^ HEAD)"
+          should_deploy=false
+
+          while IFS= read -r file; do
+            case "$file" in
+              packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
+                should_deploy=true
+                break
+                ;;
+            esac
+          done <<< "$changed_files"
+
+          echo "should_deploy=$should_deploy" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: detect-changes
+    if: github.event.workflow_run.conclusion == 'success' && needs.detect-changes.outputs.should_deploy == 'true'
     runs-on: ubuntu-latest
 
     steps:
