@@ -12,6 +12,7 @@ type PlannerInput = {
   prefix?: string;
   chunkSize?: number;
   outputPrefix?: string;
+  maxConcurrency?: number;
 };
 
 type PlannerOutput = {
@@ -21,6 +22,7 @@ type PlannerOutput = {
   totalPartitions: number;
   totalChunks: number;
   chunkKeys: string[];
+  maxConcurrency?: number;
 };
 
 const DEFAULT_BUCKET = process.env.BACKFILL_BUCKET || 'weather-tempest-records';
@@ -138,5 +140,6 @@ export const handler = async (event: PlannerInput = {}): Promise<PlannerOutput> 
     totalPartitions: partitions.length,
     totalChunks: partitionChunks.length,
     chunkKeys,
+    ...(event.maxConcurrency !== undefined ? { maxConcurrency: event.maxConcurrency } : {}),
   };
 };
