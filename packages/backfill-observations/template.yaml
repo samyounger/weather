@@ -30,11 +30,6 @@ Parameters:
   ChunkSize:
     Type: Number
     Default: 100
-  MaxConcurrency:
-    Type: Number
-    Default: 3
-    MinValue: 1
-    Description: Maximum number of concurrent chunk workers (must be an integer >= 1)
 
 Resources:
   BackfillPlannerFunction:
@@ -116,8 +111,20 @@ Resources:
       Type: STANDARD
       Definition:
         Comment: Backfill historical S3 partition metadata into Athena.
-        StartAt: DetermineChunkSource
+        StartAt: EnsureMaxConcurrency
         States:
+          EnsureMaxConcurrency:
+            Type: Choice
+            Choices:
+              - Variable: $.maxConcurrency
+                IsPresent: true
+                Next: DetermineChunkSource
+            Default: SetDefaultMaxConcurrency
+          SetDefaultMaxConcurrency:
+            Type: Pass
+            Result: 3
+            ResultPath: $.maxConcurrency
+            Next: DetermineChunkSource
           DetermineChunkSource:
             Type: Choice
             Choices:
@@ -141,7 +148,7 @@ Resources:
             Type: Map
             ItemsPath: $.chunkKeys
             ResultPath: $.chunkResults
-            MaxConcurrency: ${MaxConcurrency}
+            MaxConcurrencyPath: $.maxConcurrency
             ItemSelector:
               chunkKey.$: $$.Map.Item.Value
               bucket.$: $.bucket
@@ -197,8 +204,6 @@ Resources:
             Next: Done
           Done:
             Type: Succeed
-      DefinitionSubstitutions:
-        MaxConcurrency: !Ref MaxConcurrency
       Policies:
         - LambdaInvokePolicy:
             FunctionName: !Ref BackfillPlannerFunction

@@ -34,6 +34,7 @@ Example execution input:
   "prefix": "",
   "outputPrefix": "backfill/athena-partitions",
   "chunkSize": 100,
+  "maxConcurrency": 3,
   "database": "tempest_weather",
   "table": "observations",
   "outputLocation": "s3://weather-tempest-records/queries/",
@@ -69,6 +70,7 @@ Use failed chunk keys from the previous execution output to rerun only failed ch
 ```json
 {
   "bucket": "weather-tempest-records",
+  "maxConcurrency": 3,
   "chunkKeys": [
     "backfill/athena-partitions/runs/2026-02-16T00-00-00-000Z/chunks/chunk-00012.json",
     "backfill/athena-partitions/runs/2026-02-16T00-00-00-000Z/chunks/chunk-00044.json"
@@ -84,5 +86,5 @@ Use failed chunk keys from the previous execution output to rerun only failed ch
 
 - Backfill is idempotent via `ADD IF NOT EXISTS`.
 - If `chunkKeys` are provided in execution input, planner is skipped and only those chunks are processed.
-- Tune `chunkSize` and `MaxConcurrency` if Athena throttles.
+- Tune `chunkSize` and `maxConcurrency` (execution input field, default `3`) if Athena throttles.
 - Safe rerun strategy: rerun with `failedChunkKeys`.
