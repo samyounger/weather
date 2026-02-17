@@ -117,6 +117,14 @@ jobs:
           echo "TEMPEST_TOKEN=${{ secrets.TEMPEST_TOKEN }}" >> $GITHUB_ENV
           echo "TEMPEST_DEVICE_ID=${{ vars.TEMPEST_DEVICE_ID }}" >> $GITHUB_ENV
           echo "TEMPEST_STATION_ID=${{ vars.TEMPEST_STATION_ID }}" >> $GITHUB_ENV
+          echo "ALERT_EMAIL=${{ vars.ALERT_EMAIL }}" >> $GITHUB_ENV
+
+      - name: Validate alert email is configured
+        run: |
+          if [ -z "$ALERT_EMAIL" ]; then
+            echo "Repository variable ALERT_EMAIL must be set to enable alerting."
+            exit 1
+          fi
 
       - name: Deploy SAM application
         working-directory: packages/refine-observations
@@ -126,4 +134,5 @@ jobs:
               TempestHost=$TEMPEST_HOST \
               TempestToken=$TEMPEST_TOKEN \
               TempestDeviceId=$TEMPEST_DEVICE_ID \
-              TempestStationId=$TEMPEST_STATION_ID
+              TempestStationId=$TEMPEST_STATION_ID \
+              AlertEmail=$ALERT_EMAIL

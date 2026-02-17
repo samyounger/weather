@@ -104,6 +104,20 @@ jobs:
         working-directory: packages/backfill-observations
         run: sam build --config-env prod
 
+      - name: Set SAM deploy parameters from repo variables
+        run: |
+          echo "ALERT_EMAIL=${{ vars.ALERT_EMAIL }}" >> $GITHUB_ENV
+
+      - name: Validate alert email is configured
+        run: |
+          if [ -z "$ALERT_EMAIL" ]; then
+            echo "Repository variable ALERT_EMAIL must be set to enable alerting."
+            exit 1
+          fi
+
       - name: Deploy SAM application
         working-directory: packages/backfill-observations
-        run: sam deploy --config-env prod
+        run: |
+          sam deploy --config-env prod \
+            --parameter-overrides \
+              AlertEmail=$ALERT_EMAIL
