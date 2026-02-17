@@ -115,6 +115,12 @@ export const handler = async (event: WorkerInput): Promise<WorkerOutput> => {
     },
     ResultConfiguration: {
       OutputLocation: outputLocation,
+      EncryptionConfiguration: {
+        EncryptionOption: 'SSE_S3',
+      },
+      AclConfiguration: {
+        S3AclOption: 'BUCKET_OWNER_FULL_CONTROL',
+      },
     },
     WorkGroup: workGroup,
     ResultReuseConfiguration: {
