@@ -33,6 +33,20 @@ Resources:
           - Action: s3:PutObject
             Effect: Allow
             Resource: !Sub "arn:aws:s3:::weather-tempest-records/*"
+          - Action:
+              - s3:GetBucketLocation
+              - s3:ListBucket
+              - s3:ListBucketMultipartUploads
+            Effect: Allow
+            Resource: !Sub "arn:aws:s3:::weather-tempest-records"
+          - Action:
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - s3:GetObject
+              - s3:AbortMultipartUpload
+              - s3:ListMultipartUploadParts
+            Effect: Allow
+            Resource: !Sub "arn:aws:s3:::weather-tempest-records/queries/*"
   TempestAthenaGlueAccessPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:

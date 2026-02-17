@@ -44,9 +44,20 @@ describe('Database', () => {
 
     it('should return false when query execution throws', async () => {
       const database = new Database();
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
       jest.spyOn(database, 'query').mockRejectedValue(new Error('athena unavailable'));
 
       await expect(database.addObservationsPartition('2024', '08', '05', '22')).resolves.toBe(false);
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Failed to add observations partition',
+        expect.objectContaining({
+          year: '2024',
+          month: '08',
+          day: '05',
+          hour: '22',
+        }),
+      );
+      errorSpy.mockRestore();
     });
   });
 });
