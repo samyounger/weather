@@ -1,0 +1,40 @@
+name: Reusable Deploy Cloud Computing
+
+on:
+  workflow_call:
+    inputs:
+      checkout_ref:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build cloud-computing package
+        run: npm run build --workspace=@weather/cloud-computing
+
+      - name: Package cloud-computing artifact
+        run: npm pack --workspace=@weather/cloud-computing
+
+      - name: Upload cloud-computing package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-computing-package
+          path: "*.tgz"
