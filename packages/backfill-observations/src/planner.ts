@@ -13,6 +13,10 @@ type PlannerInput = {
   chunkSize?: number;
   outputPrefix?: string;
   maxConcurrency?: number;
+  database?: string;
+  table?: string;
+  outputLocation?: string;
+  workGroup?: string;
 };
 
 type PlannerOutput = {
@@ -23,12 +27,20 @@ type PlannerOutput = {
   totalChunks: number;
   chunkKeys: string[];
   maxConcurrency?: number;
+  database?: string;
+  table?: string;
+  outputLocation?: string;
+  workGroup?: string;
 };
 
 const DEFAULT_BUCKET = process.env.BACKFILL_BUCKET || 'weather-tempest-records';
 const DEFAULT_PREFIX = process.env.BACKFILL_SCAN_PREFIX || '';
 const DEFAULT_OUTPUT_PREFIX = process.env.BACKFILL_OUTPUT_PREFIX || 'backfill/athena-partitions';
 const DEFAULT_CHUNK_SIZE = Number(process.env.BACKFILL_CHUNK_SIZE || '100');
+const DEFAULT_DATABASE = process.env.BACKFILL_ATHENA_DATABASE || 'tempest_weather';
+const DEFAULT_TABLE = process.env.BACKFILL_ATHENA_TABLE || 'observations';
+const DEFAULT_OUTPUT_LOCATION = process.env.BACKFILL_ATHENA_OUTPUT || 's3://weather-tempest-records/queries/';
+const DEFAULT_WORK_GROUP = process.env.BACKFILL_ATHENA_WORKGROUP || 'primary';
 
 const s3Client = new S3Client({ region: process.env.AWS_REGION || 'eu-west-2' });
 
@@ -100,6 +112,10 @@ export const handler = async (event: PlannerInput = {}): Promise<PlannerOutput> 
   const prefix = event.prefix ?? DEFAULT_PREFIX;
   const outputPrefix = event.outputPrefix || DEFAULT_OUTPUT_PREFIX;
   const chunkSize = event.chunkSize || DEFAULT_CHUNK_SIZE;
+  const database = event.database || DEFAULT_DATABASE;
+  const table = event.table || DEFAULT_TABLE;
+  const outputLocation = event.outputLocation || DEFAULT_OUTPUT_LOCATION;
+  const workGroup = event.workGroup || DEFAULT_WORK_GROUP;
 
   if (chunkSize <= 0) {
     throw new Error('chunkSize must be greater than zero');
@@ -141,5 +157,9 @@ export const handler = async (event: PlannerInput = {}): Promise<PlannerOutput> 
     totalChunks: partitionChunks.length,
     chunkKeys,
     ...(event.maxConcurrency !== undefined ? { maxConcurrency: event.maxConcurrency } : {}),
+    database,
+    table,
+    outputLocation,
+    workGroup,
   };
 };
