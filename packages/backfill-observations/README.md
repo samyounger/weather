@@ -1,6 +1,5 @@
 # Athena Partition Backfill
 
-
 This folder contains a one-off backfill workflow that discovers historical S3 partitions and registers them in Athena.
 
 ## Files
