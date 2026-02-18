@@ -18,6 +18,8 @@ jobs:
       version: ${{ steps.parse.outputs.version }}
       environment: ${{ steps.parse.outputs.environment }}
       supports_cloudformation: ${{ steps.parse.outputs.supports_cloudformation }}
+      stack_name: ${{ steps.parse.outputs.stack_name }}
+      stack_url: ${{ steps.parse.outputs.stack_url }}
     steps:
       - name: Parse package tag
         id: parse
@@ -31,6 +33,8 @@ jobs:
 
           supports_cloudformation=false
           environment=""
+          stack_name=""
+          stack_url=""
           case "$package" in
             store-observations|fetch-observations|refine-observations|backfill-observations)
               supports_cloudformation=true
@@ -39,6 +43,7 @@ jobs:
             github-tempest-cfn-deploy-role)
               supports_cloudformation=true
               environment="prod-github-tempest-cfn-deploy-role"
+              stack_name="tempest-github-cfn-deploy-role"
               ;;
             cloud-computing)
               supports_cloudformation=false
@@ -46,10 +51,31 @@ jobs:
               ;;
           esac
 
+          case "$package" in
+            store-observations)
+              stack_name="tempest-weather-store-lib"
+              ;;
+            fetch-observations)
+              stack_name="tempest-weather-fetch-lib"
+              ;;
+            refine-observations)
+              stack_name="tempest-weather-refine-lib"
+              ;;
+            backfill-observations)
+              stack_name="tempest-weather-backfill-lib"
+              ;;
+          esac
+
+          if [ -n "$stack_name" ]; then
+            stack_url="https://eu-west-2.console.aws.amazon.com/cloudformation/home?region=eu-west-2#/stacks/stackinfo?stackId=${stack_name}"
+          fi
+
           echo "package=$package" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "environment=$environment" >> "$GITHUB_OUTPUT"
           echo "supports_cloudformation=$supports_cloudformation" >> "$GITHUB_OUTPUT"
+          echo "stack_name=$stack_name" >> "$GITHUB_OUTPUT"
+          echo "stack_url=$stack_url" >> "$GITHUB_OUTPUT"
 
   create-deployment:
     needs: parse-tag
@@ -83,6 +109,7 @@ jobs:
               deployment_id: deployment.data.id,
               state: 'in_progress',
               log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
               description: 'Deployment started'
             });
 
@@ -91,12 +118,16 @@ jobs:
       - parse-tag
       - create-deployment
     if: needs.parse-tag.outputs.package == 'store-observations'
+    concurrency:
+      group: deploy-prod-store-observations
+      cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-observations.yml
     with:
       checkout_ref: ${{ github.sha }}
       package_workspace: "@weather/store-observations"
       package_directory: packages/store-observations
       artifact_bucket: tempest-artifacts-store-prod-926898703023
+      stack_name: tempest-weather-store-lib
     secrets: inherit
 
   deploy-fetch:
@@ -104,12 +135,16 @@ jobs:
       - parse-tag
       - create-deployment
     if: needs.parse-tag.outputs.package == 'fetch-observations'
+    concurrency:
+      group: deploy-prod-fetch-observations
+      cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-observations.yml
     with:
       checkout_ref: ${{ github.sha }}
       package_workspace: "@weather/fetch-observations"
       package_directory: packages/fetch-observations
       artifact_bucket: tempest-artifacts-fetch-prod-926898703023
+      stack_name: tempest-weather-fetch-lib
     secrets: inherit
 
   deploy-refine:
@@ -117,12 +152,16 @@ jobs:
       - parse-tag
       - create-deployment
     if: needs.parse-tag.outputs.package == 'refine-observations'
+    concurrency:
+      group: deploy-prod-refine-observations
+      cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-observations.yml
     with:
       checkout_ref: ${{ github.sha }}
       package_workspace: "@weather/refine-observations"
       package_directory: packages/refine-observations
       artifact_bucket: tempest-artifacts-refine-prod-926898703023
+      stack_name: tempest-weather-refine-lib
     secrets: inherit
 
   deploy-backfill:
@@ -130,10 +169,14 @@ jobs:
       - parse-tag
       - create-deployment
     if: needs.parse-tag.outputs.package == 'backfill-observations'
+    concurrency:
+      group: deploy-prod-backfill-observations
+      cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-backfill.yml
     with:
       checkout_ref: ${{ github.sha }}
       artifact_bucket: tempest-artifacts-backfill-prod-926898703023
+      stack_name: tempest-weather-backfill-lib
     secrets: inherit
 
   deploy-role-policy:
@@ -141,6 +184,9 @@ jobs:
       - parse-tag
       - create-deployment
     if: needs.parse-tag.outputs.package == 'github-tempest-cfn-deploy-role'
+    concurrency:
+      group: deploy-prod-github-tempest-cfn-deploy-role
+      cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-role-policy.yml
     with:
       checkout_ref: ${{ github.sha }}
@@ -173,6 +219,7 @@ jobs:
               deployment_id: Number('${{ needs.create-deployment.outputs.deployment_id }}'),
               state,
               log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
               description: `Deployment ${state}`
             });
 
@@ -195,6 +242,7 @@ jobs:
               deployment_id: Number('${{ needs.create-deployment.outputs.deployment_id }}'),
               state,
               log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
               description: `Deployment ${state}`
             });
 
@@ -217,6 +265,7 @@ jobs:
               deployment_id: Number('${{ needs.create-deployment.outputs.deployment_id }}'),
               state,
               log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
               description: `Deployment ${state}`
             });
 
@@ -239,6 +288,7 @@ jobs:
               deployment_id: Number('${{ needs.create-deployment.outputs.deployment_id }}'),
               state,
               log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
               description: `Deployment ${state}`
             });
 
@@ -261,6 +311,7 @@ jobs:
               deployment_id: Number('${{ needs.create-deployment.outputs.deployment_id }}'),
               state,
               log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
               description: `Deployment ${state}`
             });
 
@@ -292,6 +343,8 @@ jobs:
             echo "- Version: \`${{ needs.parse-tag.outputs.version }}\`"
             echo "- Environment: \`${{ needs.parse-tag.outputs.environment }}\`"
             echo "- CloudFormation package: \`${{ needs.parse-tag.outputs.supports_cloudformation }}\`"
+            echo "- CloudFormation stack: \`${{ needs.parse-tag.outputs.stack_name }}\`"
+            echo "- Stack URL: ${{ needs.parse-tag.outputs.stack_url }}"
             echo
             echo "| Job | Result |"
             echo "|---|---|"

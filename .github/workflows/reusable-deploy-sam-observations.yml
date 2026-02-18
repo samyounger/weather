@@ -15,6 +15,9 @@ on:
       artifact_bucket:
         required: true
         type: string
+      stack_name:
+        required: true
+        type: string
 
 permissions:
   id-token: write
@@ -93,6 +96,8 @@ jobs:
         run: sam build --config-env prod
 
       - name: Deploy SAM application
+        id: deploy
+        continue-on-error: true
         working-directory: ${{ inputs.package_directory }}
         env:
           TEMPEST_HOST: ${{ vars.TEMPEST_HOST }}
@@ -108,3 +113,27 @@ jobs:
               TempestDeviceId=$TEMPEST_DEVICE_ID \
               TempestStationId=$TEMPEST_STATION_ID \
               AlertEmail=$ALERT_EMAIL
+
+      - name: Capture CloudFormation failure events
+        if: steps.deploy.outcome == 'failure'
+        env:
+          STACK_NAME: ${{ inputs.stack_name }}
+          AWS_REGION: eu-west-2
+        run: |
+          {
+            echo "## CloudFormation Failure Events: ${STACK_NAME}"
+            echo
+            echo "| Timestamp | Resource | Status | Reason |"
+            echo "|---|---|---|---|"
+            aws cloudformation describe-stack-events \
+              --stack-name "$STACK_NAME" \
+              --region "$AWS_REGION" \
+              --query "StackEvents[?contains(ResourceStatus, 'FAILED')].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]" \
+              --output text | while read -r ts resource status reason; do
+                echo "| ${ts} | ${resource} | ${status} | ${reason} |"
+              done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail workflow if deploy failed
+        if: steps.deploy.outcome == 'failure'
+        run: exit 1

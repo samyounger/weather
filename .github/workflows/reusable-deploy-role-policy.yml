@@ -34,8 +34,34 @@ jobs:
           aws-region: eu-west-2
 
       - name: Deploy role policy stack
+        id: deploy
+        continue-on-error: true
         run: |
           aws cloudformation deploy \
             --stack-name tempest-github-cfn-deploy-role \
             --template-file infra/github-tempest-cfn-deploy-role/template.yaml \
             --capabilities CAPABILITY_NAMED_IAM
+
+      - name: Capture CloudFormation failure events
+        if: steps.deploy.outcome == 'failure'
+        env:
+          STACK_NAME: tempest-github-cfn-deploy-role
+          AWS_REGION: eu-west-2
+        run: |
+          {
+            echo "## CloudFormation Failure Events: ${STACK_NAME}"
+            echo
+            echo "| Timestamp | Resource | Status | Reason |"
+            echo "|---|---|---|---|"
+            aws cloudformation describe-stack-events \
+              --stack-name "$STACK_NAME" \
+              --region "$AWS_REGION" \
+              --query "StackEvents[?contains(ResourceStatus, 'FAILED')].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]" \
+              --output text | while read -r ts resource status reason; do
+                echo "| ${ts} | ${resource} | ${status} | ${reason} |"
+              done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail workflow if deploy failed
+        if: steps.deploy.outcome == 'failure'
+        run: exit 1
