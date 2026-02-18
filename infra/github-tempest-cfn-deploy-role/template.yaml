@@ -247,6 +247,13 @@ Resources:
               - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-fetch-*
               - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-refine-*
               - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-backfill-*
+          - Sid: ReadDeployRoleInlinePolicies
+            Effect: Allow
+            Action:
+              - iam:GetRole
+              - iam:GetRolePolicy
+              - iam:ListRolePolicies
+            Resource: !Sub arn:aws:iam::${ArtifactAccountId}:role/${DeployRoleName}
           - Sid: StepFunctionPermissions
             Effect: Allow
             Action:
