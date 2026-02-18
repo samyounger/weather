@@ -2,7 +2,6 @@
 
 This folder contains a one-off backfill workflow that discovers historical S3 partitions and registers them in Athena.
 
-
 ## Files
 
 - `planner.ts`: scans S3 object keys, extracts `year/month/day/hour` partitions, writes chunk files + manifest.
@@ -82,7 +81,6 @@ Use failed chunk keys from the previous execution output to rerun only failed ch
   "workGroup": "primary"
 }
 ```
-
 
 ## Notes
 

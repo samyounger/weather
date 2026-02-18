@@ -1,4 +1,3 @@
 # Cloud Computing Package
 
-
 This package provides utilities and functions for cloud computing operations within the weather project. It includes modules for interacting with cloud services, managing resources, and supporting distributed computing workflows. The package is designed to facilitate integration with cloud platforms such as AWS, enabling scalable and efficient processing of weather-related data.

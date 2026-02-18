@@ -48,6 +48,5 @@ Saves a new observation record to the database.
 
 Retrieves an observation record by its ID.
 
-
 - `id`: The ID of the observation record to retrieve.
 - Returns a promise that resolves with the retrieved observation record.
