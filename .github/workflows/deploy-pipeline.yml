@@ -17,94 +17,36 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      deploy_role: ${{ steps.filter.outputs.deploy_role }}
-      deploy_cloud: ${{ steps.filter.outputs.deploy_cloud }}
-      deploy_store: ${{ steps.filter.outputs.deploy_store }}
-      deploy_fetch: ${{ steps.filter.outputs.deploy_fetch }}
-      deploy_refine: ${{ steps.filter.outputs.deploy_refine }}
-      deploy_backfill: ${{ steps.filter.outputs.deploy_backfill }}
+      deploy_role: ${{ steps.changed.outputs.deploy_role }}
+      deploy_cloud: ${{ steps.changed.outputs.cloud }}
+      deploy_store: ${{ steps.changed.outputs.store }}
+      deploy_fetch: ${{ steps.changed.outputs.fetch }}
+      deploy_refine: ${{ steps.changed.outputs.refine }}
+      deploy_backfill: ${{ steps.changed.outputs.backfill }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 2
+          fetch-depth: 0
 
-      - name: Determine package deployments required
-        id: filter
+      - name: Resolve base commit
+        id: base
         run: |
-          deploy_role=false
-          deploy_cloud=false
-          deploy_store=false
-          deploy_fetch=false
-          deploy_refine=false
-          deploy_backfill=false
-
-          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
-            echo "deploy_role=$deploy_role" >> "$GITHUB_OUTPUT"
-            echo "deploy_cloud=$deploy_cloud" >> "$GITHUB_OUTPUT"
-            echo "deploy_store=$deploy_store" >> "$GITHUB_OUTPUT"
-            echo "deploy_fetch=$deploy_fetch" >> "$GITHUB_OUTPUT"
-            echo "deploy_refine=$deploy_refine" >> "$GITHUB_OUTPUT"
-            echo "deploy_backfill=$deploy_backfill" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-            deploy_role=true
-            deploy_cloud=true
-            deploy_store=true
-            deploy_fetch=true
-            deploy_refine=true
-            deploy_backfill=true
+          if git rev-parse --verify "${{ github.event.workflow_run.head_sha }}^" >/dev/null 2>&1; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}^" >> "$GITHUB_OUTPUT"
           else
-            changed_files="$(git diff --name-only HEAD^ HEAD)"
-
-            while IFS= read -r file; do
-              case "$file" in
-                infra/github-tempest-cfn-deploy-role/*|.github/workflows/reusable-deploy-role-policy.yml|.github/workflows/deploy-pipeline.yml)
-                  deploy_role=true
-                  ;;
-              esac
-
-              case "$file" in
-                packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
-                  deploy_cloud=true
-                  ;;
-              esac
-
-              case "$file" in
-                packages/store-observations/*|packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*|.github/workflows/reusable-deploy-sam-observations.yml)
-                  deploy_store=true
-                  ;;
-              esac
-
-              case "$file" in
-                packages/fetch-observations/*|packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*|.github/workflows/reusable-deploy-sam-observations.yml)
-                  deploy_fetch=true
-                  ;;
-              esac
-
-              case "$file" in
-                packages/refine-observations/*|packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*|.github/workflows/reusable-deploy-sam-observations.yml)
-                  deploy_refine=true
-                  ;;
-              esac
-
-              case "$file" in
-                packages/backfill-observations/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*|.github/workflows/reusable-deploy-sam-backfill.yml)
-                  deploy_backfill=true
-                  ;;
-              esac
-            done <<< "$changed_files"
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "deploy_role=$deploy_role" >> "$GITHUB_OUTPUT"
-          echo "deploy_cloud=$deploy_cloud" >> "$GITHUB_OUTPUT"
-          echo "deploy_store=$deploy_store" >> "$GITHUB_OUTPUT"
-          echo "deploy_fetch=$deploy_fetch" >> "$GITHUB_OUTPUT"
-          echo "deploy_refine=$deploy_refine" >> "$GITHUB_OUTPUT"
-          echo "deploy_backfill=$deploy_backfill" >> "$GITHUB_OUTPUT"
+      - name: Detect package changes
+        id: changed
+        if: github.event.workflow_run.conclusion == 'success'
+        uses: ./.github/actions/detect-package-changes
+        with:
+          base_sha: ${{ steps.base.outputs.sha }}
+          head_sha: ${{ github.event.workflow_run.head_sha }}
+          include_workflow_dependencies: "true"
 
   deploy-role-policy:
     needs: detect-changes

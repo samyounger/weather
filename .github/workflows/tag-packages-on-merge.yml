@@ -1,0 +1,120 @@
+name: Tag Packages On Merge
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+permissions:
+  contents: write
+
+jobs:
+  tag-packages:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Determine semver bump level
+        id: bump
+        run: |
+          set -euo pipefail
+
+          labels="$(jq -r '.pull_request.labels[].name' "$GITHUB_EVENT_PATH" || true)"
+          title="$(jq -r '.pull_request.title' "$GITHUB_EVENT_PATH")"
+          body="$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH")"
+
+          if echo "$labels" | rg -q '^semver:major$'; then
+            bump="major"
+          elif echo "$labels" | rg -q '^semver:minor$'; then
+            bump="minor"
+          elif echo "$labels" | rg -q '^semver:patch$'; then
+            bump="patch"
+          elif printf '%s\n%s' "$title" "$body" | rg -q 'BREAKING CHANGE'; then
+            bump="major"
+          elif echo "$title" | rg -q '^[^:]+!:'; then
+            bump="major"
+          elif echo "$title" | rg -q '^feat(\(.+\))?:'; then
+            bump="minor"
+          else
+            bump="patch"
+          fi
+
+          echo "bump=$bump" >> "$GITHUB_OUTPUT"
+
+      - name: Determine changed packages
+        id: changed
+        uses: ./.github/actions/detect-package-changes
+        with:
+          base_sha: ${{ github.event.pull_request.base.sha }}
+          head_sha: ${{ github.event.pull_request.merge_commit_sha }}
+          include_workflow_dependencies: "false"
+
+      - name: Create and push package tags
+        env:
+          BUMP: ${{ steps.bump.outputs.bump }}
+          CLOUD_CHANGED: ${{ steps.changed.outputs.cloud }}
+          STORE_CHANGED: ${{ steps.changed.outputs.store }}
+          FETCH_CHANGED: ${{ steps.changed.outputs.fetch }}
+          REFINE_CHANGED: ${{ steps.changed.outputs.refine }}
+          BACKFILL_CHANGED: ${{ steps.changed.outputs.backfill }}
+        run: |
+          set -euo pipefail
+
+          bump_version() {
+            local version="$1"
+            local bump="$2"
+            IFS='.' read -r major minor patch <<< "$version"
+            case "$bump" in
+              major)
+                major=$((major + 1)); minor=0; patch=0
+                ;;
+              minor)
+                minor=$((minor + 1)); patch=0
+                ;;
+              *)
+                patch=$((patch + 1))
+                ;;
+            esac
+            echo "${major}.${minor}.${patch}"
+          }
+
+          create_tag_for_package() {
+            local package="$1"
+            local changed="$2"
+            if [ "$changed" != "true" ]; then
+              return 0
+            fi
+
+            local prefix="pkg/${package}/v"
+            local latest
+            latest="$(git tag -l "${prefix}*" | sed "s#${prefix}##" | sort -V | tail -n1)"
+            if [ -z "$latest" ]; then
+              latest="0.0.0"
+            fi
+
+            local next
+            next="$(bump_version "$latest" "$BUMP")"
+            local tag="${prefix}${next}"
+
+            if git rev-parse "$tag" >/dev/null 2>&1; then
+              echo "Tag already exists, skipping: $tag"
+              return 0
+            fi
+
+            git tag -a "$tag" -m "Release ${package} ${next}"
+            git push origin "$tag"
+            echo "Published tag: $tag"
+          }
+
+          create_tag_for_package "cloud-computing" "$CLOUD_CHANGED"
+          create_tag_for_package "store-observations" "$STORE_CHANGED"
+          create_tag_for_package "fetch-observations" "$FETCH_CHANGED"
+          create_tag_for_package "refine-observations" "$REFINE_CHANGED"
+          create_tag_for_package "backfill-observations" "$BACKFILL_CHANGED"
