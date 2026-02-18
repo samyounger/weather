@@ -21,7 +21,7 @@ Resources:
   GitHubTempestCfnDeployRoleFoundationManagedPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: GitHubTempestCfnDeployRoleFoundationPolicy
+      ManagedPolicyName: TempestGitHubCfnDeployRoleFoundationPolicy
       Roles:
         - !Ref DeployRoleName
       PolicyDocument:
@@ -154,7 +154,7 @@ Resources:
   GitHubTempestCfnDeployRoleDeploymentManagedPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: GitHubTempestCfnDeployRoleDeploymentPolicy
+      ManagedPolicyName: TempestGitHubCfnDeployRoleDeploymentPolicy
       Roles:
         - !Ref DeployRoleName
       PolicyDocument:
@@ -274,7 +274,7 @@ Resources:
   GitHubTempestCfnDeployRoleAlertsManagedPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: GitHubTempestCfnDeployRoleAlertsPolicy
+      ManagedPolicyName: TempestGitHubCfnDeployRoleAlertsPolicy
       Roles:
         - !Ref DeployRoleName
       PolicyDocument:
@@ -314,7 +314,7 @@ Resources:
   GitHubTempestCfnDeployRoleReadManagedPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: GitHubTempestCfnDeployRoleReadPolicy
+      ManagedPolicyName: TempestGitHubCfnDeployRoleReadPolicy
       Roles:
         - !Ref DeployRoleName
       PolicyDocument:
