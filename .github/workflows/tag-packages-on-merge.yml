@@ -213,9 +213,9 @@ jobs:
     needs:
       - prepare-release
       - test-cloud
-      - deploy-role-policy
+      - role-policy-ready
       - create-deployment-cloud
-    if: needs.prepare-release.outputs.cloud_changed == 'true' && needs.test-cloud.result == 'success' && (needs.prepare-release.outputs.role_changed != 'true' || needs.deploy-role-policy.result == 'success')
+    if: needs.prepare-release.outputs.cloud_changed == 'true' && needs.test-cloud.result == 'success' && needs.role-policy-ready.outputs.ready == 'true'
     uses: ./.github/workflows/reusable-deploy-cloud-computing.yml
     with:
       checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
@@ -225,8 +225,8 @@ jobs:
     needs:
       - prepare-release
       - test-cloud
-      - deploy-role-policy
-    if: needs.prepare-release.outputs.cloud_changed == 'true' && needs.test-cloud.result == 'success' && (needs.prepare-release.outputs.role_changed != 'true' || needs.deploy-role-policy.result == 'success')
+      - role-policy-ready
+    if: needs.prepare-release.outputs.cloud_changed == 'true' && needs.test-cloud.result == 'success' && needs.role-policy-ready.outputs.ready == 'true'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -263,9 +263,9 @@ jobs:
     needs:
       - prepare-release
       - test-store
-      - deploy-role-policy
+      - role-policy-ready
       - create-deployment-store
-    if: needs.prepare-release.outputs.store_changed == 'true' && needs.test-store.result == 'success' && (needs.prepare-release.outputs.role_changed != 'true' || needs.deploy-role-policy.result == 'success')
+    if: needs.prepare-release.outputs.store_changed == 'true' && needs.test-store.result == 'success' && needs.role-policy-ready.outputs.ready == 'true'
     concurrency:
       group: deploy-prod-store-observations
       cancel-in-progress: false
@@ -282,8 +282,8 @@ jobs:
     needs:
       - prepare-release
       - test-store
-      - deploy-role-policy
-    if: needs.prepare-release.outputs.store_changed == 'true' && needs.test-store.result == 'success' && (needs.prepare-release.outputs.role_changed != 'true' || needs.deploy-role-policy.result == 'success')
+      - role-policy-ready
+    if: needs.prepare-release.outputs.store_changed == 'true' && needs.test-store.result == 'success' && needs.role-policy-ready.outputs.ready == 'true'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -319,9 +319,9 @@ jobs:
     needs:
       - prepare-release
       - test-fetch
-      - deploy-role-policy
+      - role-policy-ready
       - create-deployment-fetch
-    if: needs.prepare-release.outputs.fetch_changed == 'true' && needs.test-fetch.result == 'success' && (needs.prepare-release.outputs.role_changed != 'true' || needs.deploy-role-policy.result == 'success')
+    if: needs.prepare-release.outputs.fetch_changed == 'true' && needs.test-fetch.result == 'success' && needs.role-policy-ready.outputs.ready == 'true'
     concurrency:
       group: deploy-prod-fetch-observations
       cancel-in-progress: false
@@ -338,8 +338,8 @@ jobs:
     needs:
       - prepare-release
       - test-fetch
-      - deploy-role-policy
-    if: needs.prepare-release.outputs.fetch_changed == 'true' && needs.test-fetch.result == 'success' && (needs.prepare-release.outputs.role_changed != 'true' || needs.deploy-role-policy.result == 'success')
+      - role-policy-ready
+    if: needs.prepare-release.outputs.fetch_changed == 'true' && needs.test-fetch.result == 'success' && needs.role-policy-ready.outputs.ready == 'true'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -375,9 +375,9 @@ jobs:
     needs:
       - prepare-release
       - test-refine
-      - deploy-role-policy
+      - role-policy-ready
       - create-deployment-refine
-    if: needs.prepare-release.outputs.refine_changed == 'true' && needs.test-refine.result == 'success' && (needs.prepare-release.outputs.role_changed != 'true' || needs.deploy-role-policy.result == 'success')
+    if: needs.prepare-release.outputs.refine_changed == 'true' && needs.test-refine.result == 'success' && needs.role-policy-ready.outputs.ready == 'true'
     concurrency:
       group: deploy-prod-refine-observations
       cancel-in-progress: false
@@ -394,8 +394,8 @@ jobs:
     needs:
       - prepare-release
       - test-refine
-      - deploy-role-policy
-    if: needs.prepare-release.outputs.refine_changed == 'true' && needs.test-refine.result == 'success' && (needs.prepare-release.outputs.role_changed != 'true' || needs.deploy-role-policy.result == 'success')
+      - role-policy-ready
+    if: needs.prepare-release.outputs.refine_changed == 'true' && needs.test-refine.result == 'success' && needs.role-policy-ready.outputs.ready == 'true'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -431,9 +431,9 @@ jobs:
     needs:
       - prepare-release
       - test-backfill
-      - deploy-role-policy
+      - role-policy-ready
       - create-deployment-backfill
-    if: needs.prepare-release.outputs.backfill_changed == 'true' && needs.test-backfill.result == 'success' && (needs.prepare-release.outputs.role_changed != 'true' || needs.deploy-role-policy.result == 'success')
+    if: needs.prepare-release.outputs.backfill_changed == 'true' && needs.test-backfill.result == 'success' && needs.role-policy-ready.outputs.ready == 'true'
     concurrency:
       group: deploy-prod-backfill-observations
       cancel-in-progress: false
@@ -448,8 +448,8 @@ jobs:
     needs:
       - prepare-release
       - test-backfill
-      - deploy-role-policy
-    if: needs.prepare-release.outputs.backfill_changed == 'true' && needs.test-backfill.result == 'success' && (needs.prepare-release.outputs.role_changed != 'true' || needs.deploy-role-policy.result == 'success')
+      - role-policy-ready
+    if: needs.prepare-release.outputs.backfill_changed == 'true' && needs.test-backfill.result == 'success' && needs.role-policy-ready.outputs.ready == 'true'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -491,6 +491,32 @@ jobs:
     with:
       checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
     secrets: inherit
+
+  role-policy-ready:
+    needs:
+      - prepare-release
+      - deploy-role-policy
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.gate.outputs.ready }}
+    steps:
+      - name: Resolve role policy readiness
+        id: gate
+        run: |
+          if [ "${{ needs.prepare-release.outputs.role_changed }}" != "true" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ needs.deploy-role-policy.result }}" = "success" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "ready=false" >> "$GITHUB_OUTPUT"
+          echo "Role policy was changed but deploy-role-policy did not succeed."
+          exit 1
 
   create-deployment-role-policy:
     needs: prepare-release
