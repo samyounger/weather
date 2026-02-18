@@ -12,6 +12,13 @@ on:
       stack_name:
         required: true
         type: string
+    outputs:
+      stack_url:
+        description: CloudFormation stack URL for the deployed stack
+        value: ${{ jobs.deploy.outputs.stack_url }}
+      failure_reason:
+        description: First CloudFormation failure reason if deployment fails
+        value: ${{ jobs.deploy.outputs.failure_reason }}
 
 permissions:
   id-token: write
@@ -20,6 +27,9 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    outputs:
+      stack_url: ${{ steps.report.outputs.stack_url }}
+      failure_reason: ${{ steps.report.outputs.failure_reason }}
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -93,6 +103,23 @@ jobs:
             --parameter-overrides \
               AlertEmail=$ALERT_EMAIL
 
+      - name: Capture first CloudFormation failure reason
+        id: failure-reason
+        if: steps.deploy.outcome == 'failure'
+        env:
+          STACK_NAME: ${{ inputs.stack_name }}
+          AWS_REGION: eu-west-2
+        run: |
+          reason="$(aws cloudformation describe-stack-events \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "StackEvents[?contains(ResourceStatus, 'FAILED')]|[0].ResourceStatusReason" \
+            --output text 2>/dev/null || true)"
+          if [ -z "$reason" ] || [ "$reason" = "None" ]; then
+            reason="SAM deploy failed. See workflow logs for details."
+          fi
+          echo "failure_reason=$reason" >> "$GITHUB_OUTPUT"
+
       - name: Capture CloudFormation failure events
         if: steps.deploy.outcome == 'failure'
         env:
@@ -112,6 +139,23 @@ jobs:
                 echo "| ${ts} | ${resource} | ${status} | ${reason} |"
               done
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish deployment report outputs
+        id: report
+        if: always()
+        env:
+          STACK_NAME: ${{ inputs.stack_name }}
+          AWS_REGION: eu-west-2
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          FAILURE_REASON: ${{ steps.failure-reason.outputs.failure_reason }}
+        run: |
+          stack_url="https://${AWS_REGION}.console.aws.amazon.com/cloudformation/home?region=${AWS_REGION}#/stacks/stackinfo?stackId=${STACK_NAME}"
+          echo "stack_url=$stack_url" >> "$GITHUB_OUTPUT"
+          if [ "$DEPLOY_OUTCOME" = "failure" ]; then
+            echo "failure_reason=$FAILURE_REASON" >> "$GITHUB_OUTPUT"
+          else
+            echo "failure_reason=" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Fail workflow if deploy failed
         if: steps.deploy.outcome == 'failure'

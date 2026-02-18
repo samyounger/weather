@@ -1,11 +1,14 @@
 name: Automation-Tests
 run-name: ${{ github.actor }} is running automation tests 🚀
 on:
-  push:
-    branches-ignore:
+  pull_request:
+    branches:
       - main
-    tags-ignore:
-      - '*'
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
 
 jobs:
   Run-Tests:

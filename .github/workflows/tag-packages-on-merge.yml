@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  deployments: write
   id-token: write
 
 jobs:
@@ -208,21 +209,215 @@ jobs:
       package: backfill-observations
     secrets: inherit
 
+  create-deployment-role-policy:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.role_changed == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_id: ${{ steps.create.outputs.deployment_id }}
+    steps:
+      - name: Create GitHub deployment
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ needs.prepare-release.outputs.merge_sha }}',
+              environment: 'prod-github-tempest-cfn-deploy-role',
+              transient_environment: false,
+              production_environment: true,
+              auto_merge: false,
+              required_contexts: [],
+              description: 'Deploying github-tempest-cfn-deploy-role'
+            });
+            core.setOutput('deployment_id', String(deployment.data.id));
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'in_progress',
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: 'https://eu-west-2.console.aws.amazon.com/cloudformation/home?region=eu-west-2#/stacks/stackinfo?stackId=tempest-github-cfn-deploy-role',
+              description: 'Deployment started'
+            });
+
+  deploy-role-policy:
+    needs:
+      - prepare-release
+      - create-deployment-role-policy
+    if: needs.prepare-release.outputs.role_changed == 'true' && needs.create-deployment-role-policy.result == 'success'
+    concurrency:
+      group: deploy-prod-github-tempest-cfn-deploy-role
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-role-policy.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+    secrets: inherit
+
+  complete-deployment-role-policy:
+    needs:
+      - prepare-release
+      - create-deployment-role-policy
+      - deploy-role-policy
+    if: always() && needs.create-deployment-role-policy.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Complete GitHub deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = '${{ needs.deploy-role-policy.result }}';
+            const state = result === 'success' ? 'success' : 'failure';
+            const reason = '${{ needs.deploy-role-policy.outputs.failure_reason }}';
+            const shortReason = reason ? reason.slice(0, 120) : '';
+            const description = state === 'success'
+              ? 'Deployment succeeded'
+              : (shortReason ? `Failed: ${shortReason}` : 'Deployment failed. See workflow logs.');
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number('${{ needs.create-deployment-role-policy.outputs.deployment_id }}'),
+              state,
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.deploy-role-policy.outputs.stack_url }}' || undefined,
+              description
+            });
+
+  policy-gate:
+    needs:
+      - prepare-release
+      - deploy-role-policy
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hold package deployments until policy deploy finishes when required
+        run: |
+          if [ "${{ needs.prepare-release.outputs.role_changed }}" = "true" ] && [ "${{ needs.deploy-role-policy.result }}" != "success" ]; then
+            echo "Deploy role policy changed and did not deploy successfully; package deployments are blocked."
+            exit 1
+          fi
+          echo "Policy gate passed."
+
+  create-deployment-cloud:
+    needs:
+      - prepare-release
+      - test-cloud
+      - policy-gate
+    if: needs.prepare-release.outputs.cloud_changed == 'true' && needs.test-cloud.result == 'success' && needs.policy-gate.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_id: ${{ steps.create.outputs.deployment_id }}
+    steps:
+      - name: Create GitHub deployment
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ needs.prepare-release.outputs.merge_sha }}',
+              environment: 'prod-cloud-computing',
+              transient_environment: false,
+              production_environment: true,
+              auto_merge: false,
+              required_contexts: [],
+              description: 'Deploying cloud-computing'
+            });
+            core.setOutput('deployment_id', String(deployment.data.id));
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'in_progress',
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              description: 'Deployment started'
+            });
+
   deploy-cloud:
     needs:
       - prepare-release
       - test-cloud
-    if: needs.prepare-release.outputs.cloud_changed == 'true' && needs.test-cloud.result == 'success'
+      - policy-gate
+      - create-deployment-cloud
+    if: needs.prepare-release.outputs.cloud_changed == 'true' && needs.test-cloud.result == 'success' && needs.policy-gate.result == 'success' && needs.create-deployment-cloud.result == 'success'
     uses: ./.github/workflows/reusable-deploy-cloud-computing.yml
     with:
       checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
     secrets: inherit
 
+  complete-deployment-cloud:
+    needs:
+      - create-deployment-cloud
+      - deploy-cloud
+    if: always() && needs.create-deployment-cloud.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Complete GitHub deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = '${{ needs.deploy-cloud.result }}';
+            const state = result === 'success' ? 'success' : 'failure';
+            const description = state === 'success' ? 'Deployment succeeded' : 'Deployment failed. See workflow logs.';
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number('${{ needs.create-deployment-cloud.outputs.deployment_id }}'),
+              state,
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              description
+            });
+
+  create-deployment-store:
+    needs:
+      - prepare-release
+      - test-store
+      - policy-gate
+    if: needs.prepare-release.outputs.store_changed == 'true' && needs.test-store.result == 'success' && needs.policy-gate.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_id: ${{ steps.create.outputs.deployment_id }}
+    steps:
+      - name: Create GitHub deployment
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const stackUrl = 'https://eu-west-2.console.aws.amazon.com/cloudformation/home?region=eu-west-2#/stacks/stackinfo?stackId=tempest-weather-store-lib';
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ needs.prepare-release.outputs.merge_sha }}',
+              environment: 'prod-store-observations',
+              transient_environment: false,
+              production_environment: true,
+              auto_merge: false,
+              required_contexts: [],
+              description: 'Deploying store-observations'
+            });
+            core.setOutput('deployment_id', String(deployment.data.id));
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'in_progress',
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: stackUrl,
+              description: 'Deployment started'
+            });
+
   deploy-store:
     needs:
       - prepare-release
       - test-store
-    if: needs.prepare-release.outputs.store_changed == 'true' && needs.test-store.result == 'success'
+      - policy-gate
+      - create-deployment-store
+    if: needs.prepare-release.outputs.store_changed == 'true' && needs.test-store.result == 'success' && needs.policy-gate.result == 'success' && needs.create-deployment-store.result == 'success'
     concurrency:
       group: deploy-prod-store-observations
       cancel-in-progress: false
@@ -235,11 +430,80 @@ jobs:
       stack_name: tempest-weather-store-lib
     secrets: inherit
 
+  complete-deployment-store:
+    needs:
+      - create-deployment-store
+      - deploy-store
+    if: always() && needs.create-deployment-store.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Complete GitHub deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = '${{ needs.deploy-store.result }}';
+            const state = result === 'success' ? 'success' : 'failure';
+            const reason = '${{ needs.deploy-store.outputs.failure_reason }}';
+            const shortReason = reason ? reason.slice(0, 120) : '';
+            const description = state === 'success'
+              ? 'Deployment succeeded'
+              : (shortReason ? `Failed: ${shortReason}` : 'Deployment failed. See workflow logs.');
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number('${{ needs.create-deployment-store.outputs.deployment_id }}'),
+              state,
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.deploy-store.outputs.stack_url }}' || undefined,
+              description
+            });
+
+  create-deployment-fetch:
+    needs:
+      - prepare-release
+      - test-fetch
+      - policy-gate
+    if: needs.prepare-release.outputs.fetch_changed == 'true' && needs.test-fetch.result == 'success' && needs.policy-gate.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_id: ${{ steps.create.outputs.deployment_id }}
+    steps:
+      - name: Create GitHub deployment
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const stackUrl = 'https://eu-west-2.console.aws.amazon.com/cloudformation/home?region=eu-west-2#/stacks/stackinfo?stackId=tempest-weather-fetch-lib';
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ needs.prepare-release.outputs.merge_sha }}',
+              environment: 'prod-fetch-observations',
+              transient_environment: false,
+              production_environment: true,
+              auto_merge: false,
+              required_contexts: [],
+              description: 'Deploying fetch-observations'
+            });
+            core.setOutput('deployment_id', String(deployment.data.id));
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'in_progress',
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: stackUrl,
+              description: 'Deployment started'
+            });
+
   deploy-fetch:
     needs:
       - prepare-release
       - test-fetch
-    if: needs.prepare-release.outputs.fetch_changed == 'true' && needs.test-fetch.result == 'success'
+      - policy-gate
+      - create-deployment-fetch
+    if: needs.prepare-release.outputs.fetch_changed == 'true' && needs.test-fetch.result == 'success' && needs.policy-gate.result == 'success' && needs.create-deployment-fetch.result == 'success'
     concurrency:
       group: deploy-prod-fetch-observations
       cancel-in-progress: false
@@ -252,11 +516,80 @@ jobs:
       stack_name: tempest-weather-fetch-lib
     secrets: inherit
 
+  complete-deployment-fetch:
+    needs:
+      - create-deployment-fetch
+      - deploy-fetch
+    if: always() && needs.create-deployment-fetch.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Complete GitHub deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = '${{ needs.deploy-fetch.result }}';
+            const state = result === 'success' ? 'success' : 'failure';
+            const reason = '${{ needs.deploy-fetch.outputs.failure_reason }}';
+            const shortReason = reason ? reason.slice(0, 120) : '';
+            const description = state === 'success'
+              ? 'Deployment succeeded'
+              : (shortReason ? `Failed: ${shortReason}` : 'Deployment failed. See workflow logs.');
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number('${{ needs.create-deployment-fetch.outputs.deployment_id }}'),
+              state,
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.deploy-fetch.outputs.stack_url }}' || undefined,
+              description
+            });
+
+  create-deployment-refine:
+    needs:
+      - prepare-release
+      - test-refine
+      - policy-gate
+    if: needs.prepare-release.outputs.refine_changed == 'true' && needs.test-refine.result == 'success' && needs.policy-gate.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_id: ${{ steps.create.outputs.deployment_id }}
+    steps:
+      - name: Create GitHub deployment
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const stackUrl = 'https://eu-west-2.console.aws.amazon.com/cloudformation/home?region=eu-west-2#/stacks/stackinfo?stackId=tempest-weather-refine-lib';
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ needs.prepare-release.outputs.merge_sha }}',
+              environment: 'prod-refine-observations',
+              transient_environment: false,
+              production_environment: true,
+              auto_merge: false,
+              required_contexts: [],
+              description: 'Deploying refine-observations'
+            });
+            core.setOutput('deployment_id', String(deployment.data.id));
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'in_progress',
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: stackUrl,
+              description: 'Deployment started'
+            });
+
   deploy-refine:
     needs:
       - prepare-release
       - test-refine
-    if: needs.prepare-release.outputs.refine_changed == 'true' && needs.test-refine.result == 'success'
+      - policy-gate
+      - create-deployment-refine
+    if: needs.prepare-release.outputs.refine_changed == 'true' && needs.test-refine.result == 'success' && needs.policy-gate.result == 'success' && needs.create-deployment-refine.result == 'success'
     concurrency:
       group: deploy-prod-refine-observations
       cancel-in-progress: false
@@ -269,11 +602,80 @@ jobs:
       stack_name: tempest-weather-refine-lib
     secrets: inherit
 
+  complete-deployment-refine:
+    needs:
+      - create-deployment-refine
+      - deploy-refine
+    if: always() && needs.create-deployment-refine.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Complete GitHub deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = '${{ needs.deploy-refine.result }}';
+            const state = result === 'success' ? 'success' : 'failure';
+            const reason = '${{ needs.deploy-refine.outputs.failure_reason }}';
+            const shortReason = reason ? reason.slice(0, 120) : '';
+            const description = state === 'success'
+              ? 'Deployment succeeded'
+              : (shortReason ? `Failed: ${shortReason}` : 'Deployment failed. See workflow logs.');
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number('${{ needs.create-deployment-refine.outputs.deployment_id }}'),
+              state,
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.deploy-refine.outputs.stack_url }}' || undefined,
+              description
+            });
+
+  create-deployment-backfill:
+    needs:
+      - prepare-release
+      - test-backfill
+      - policy-gate
+    if: needs.prepare-release.outputs.backfill_changed == 'true' && needs.test-backfill.result == 'success' && needs.policy-gate.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_id: ${{ steps.create.outputs.deployment_id }}
+    steps:
+      - name: Create GitHub deployment
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const stackUrl = 'https://eu-west-2.console.aws.amazon.com/cloudformation/home?region=eu-west-2#/stacks/stackinfo?stackId=tempest-weather-backfill-lib';
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ needs.prepare-release.outputs.merge_sha }}',
+              environment: 'prod-backfill-observations',
+              transient_environment: false,
+              production_environment: true,
+              auto_merge: false,
+              required_contexts: [],
+              description: 'Deploying backfill-observations'
+            });
+            core.setOutput('deployment_id', String(deployment.data.id));
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'in_progress',
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: stackUrl,
+              description: 'Deployment started'
+            });
+
   deploy-backfill:
     needs:
       - prepare-release
       - test-backfill
-    if: needs.prepare-release.outputs.backfill_changed == 'true' && needs.test-backfill.result == 'success'
+      - policy-gate
+      - create-deployment-backfill
+    if: needs.prepare-release.outputs.backfill_changed == 'true' && needs.test-backfill.result == 'success' && needs.policy-gate.result == 'success' && needs.create-deployment-backfill.result == 'success'
     concurrency:
       group: deploy-prod-backfill-observations
       cancel-in-progress: false
@@ -284,16 +686,34 @@ jobs:
       stack_name: tempest-weather-backfill-lib
     secrets: inherit
 
-  deploy-role-policy:
-    needs: prepare-release
-    if: needs.prepare-release.outputs.role_changed == 'true'
-    concurrency:
-      group: deploy-prod-github-tempest-cfn-deploy-role
-      cancel-in-progress: false
-    uses: ./.github/workflows/reusable-deploy-role-policy.yml
-    with:
-      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
-    secrets: inherit
+  complete-deployment-backfill:
+    needs:
+      - create-deployment-backfill
+      - deploy-backfill
+    if: always() && needs.create-deployment-backfill.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Complete GitHub deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = '${{ needs.deploy-backfill.result }}';
+            const state = result === 'success' ? 'success' : 'failure';
+            const reason = '${{ needs.deploy-backfill.outputs.failure_reason }}';
+            const shortReason = reason ? reason.slice(0, 120) : '';
+            const description = state === 'success'
+              ? 'Deployment succeeded'
+              : (shortReason ? `Failed: ${shortReason}` : 'Deployment failed. See workflow logs.');
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number('${{ needs.create-deployment-backfill.outputs.deployment_id }}'),
+              state,
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.deploy-backfill.outputs.stack_url }}' || undefined,
+              description
+            });
 
   release-summary:
     needs:
@@ -303,12 +723,25 @@ jobs:
       - test-fetch
       - test-refine
       - test-backfill
+      - create-deployment-cloud
+      - create-deployment-store
+      - create-deployment-fetch
+      - create-deployment-refine
+      - create-deployment-backfill
+      - create-deployment-role-policy
       - deploy-cloud
       - deploy-store
       - deploy-fetch
       - deploy-refine
       - deploy-backfill
       - deploy-role-policy
+      - complete-deployment-cloud
+      - complete-deployment-store
+      - complete-deployment-fetch
+      - complete-deployment-refine
+      - complete-deployment-backfill
+      - complete-deployment-role-policy
+      - policy-gate
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -340,10 +773,27 @@ jobs:
             echo "| test-fetch | \`${{ needs.test-fetch.result }}\` |"
             echo "| test-refine | \`${{ needs.test-refine.result }}\` |"
             echo "| test-backfill | \`${{ needs.test-backfill.result }}\` |"
+            echo "| policy-gate | \`${{ needs.policy-gate.result }}\` |"
+            echo "| deploy-role-policy | \`${{ needs.deploy-role-policy.result }}\` |"
             echo "| deploy-cloud | \`${{ needs.deploy-cloud.result }}\` |"
             echo "| deploy-store | \`${{ needs.deploy-store.result }}\` |"
             echo "| deploy-fetch | \`${{ needs.deploy-fetch.result }}\` |"
             echo "| deploy-refine | \`${{ needs.deploy-refine.result }}\` |"
             echo "| deploy-backfill | \`${{ needs.deploy-backfill.result }}\` |"
-            echo "| deploy-role-policy | \`${{ needs.deploy-role-policy.result }}\` |"
+            echo
+            echo "### Stack Links"
+            echo
+            echo "- Role policy: ${{ needs.deploy-role-policy.outputs.stack_url }}"
+            echo "- Store: ${{ needs.deploy-store.outputs.stack_url }}"
+            echo "- Fetch: ${{ needs.deploy-fetch.outputs.stack_url }}"
+            echo "- Refine: ${{ needs.deploy-refine.outputs.stack_url }}"
+            echo "- Backfill: ${{ needs.deploy-backfill.outputs.stack_url }}"
+            echo
+            echo "### Failure Reasons"
+            echo
+            echo "- Role policy: ${{ needs.deploy-role-policy.outputs.failure_reason }}"
+            echo "- Store: ${{ needs.deploy-store.outputs.failure_reason }}"
+            echo "- Fetch: ${{ needs.deploy-fetch.outputs.failure_reason }}"
+            echo "- Refine: ${{ needs.deploy-refine.outputs.failure_reason }}"
+            echo "- Backfill: ${{ needs.deploy-backfill.outputs.failure_reason }}"
           } >> "$GITHUB_STEP_SUMMARY"
