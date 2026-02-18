@@ -36,6 +36,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          run_workspace_build() {
+            local workspace="$1"
+            echo "Running build for $workspace"
+            npm run build --workspace="$workspace"
+          }
+
           run_workspace_tests() {
             local workspace="$1"
             echo "Running test:coverage for $workspace"
@@ -44,21 +50,29 @@ jobs:
 
           case "$TARGET_PACKAGE" in
             store-observations)
+              run_workspace_build "@weather/cloud-computing"
+              run_workspace_build "@weather/store-observations"
               run_workspace_tests "@weather/cloud-computing"
               run_workspace_tests "@weather/store-observations"
               ;;
             fetch-observations)
+              run_workspace_build "@weather/cloud-computing"
+              run_workspace_build "@weather/fetch-observations"
               run_workspace_tests "@weather/cloud-computing"
               run_workspace_tests "@weather/fetch-observations"
               ;;
             refine-observations)
+              run_workspace_build "@weather/cloud-computing"
+              run_workspace_build "@weather/refine-observations"
               run_workspace_tests "@weather/cloud-computing"
               run_workspace_tests "@weather/refine-observations"
               ;;
             backfill-observations)
+              run_workspace_build "@weather/backfill-observations"
               run_workspace_tests "@weather/backfill-observations"
               ;;
             cloud-computing)
+              run_workspace_build "@weather/cloud-computing"
               run_workspace_tests "@weather/cloud-computing"
               ;;
             github-tempest-cfn-deploy-role)
