@@ -48,6 +48,7 @@ Resources:
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-fetch-lib/*
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-refine-lib/*
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-backfill-lib/*
+              - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-github-cfn-deploy-role/*
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/aws-sam-cli-managed-default/*
           - Sid: CloudFormationSamTransform
             Effect: Allow
