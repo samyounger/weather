@@ -77,6 +77,14 @@ jobs:
           echo "stack_name=$stack_name" >> "$GITHUB_OUTPUT"
           echo "stack_url=$stack_url" >> "$GITHUB_OUTPUT"
 
+  test-package:
+    needs: parse-tag
+    uses: ./.github/workflows/reusable-run-package-tests.yml
+    with:
+      checkout_ref: ${{ github.sha }}
+      package: ${{ needs.parse-tag.outputs.package }}
+    secrets: inherit
+
   create-deployment:
     needs:
       - parse-tag
@@ -115,58 +123,41 @@ jobs:
               description: 'Deployment started'
             });
 
-  deploy-store:
+  deploy-observations:
     needs:
       - parse-tag
       - test-package
       - create-deployment
-    if: needs.parse-tag.outputs.package == 'store-observations'
+    if: contains(fromJSON('["store-observations","fetch-observations","refine-observations"]'), needs.parse-tag.outputs.package) && needs.parse-tag.outputs.package == matrix.package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: store-observations
+            workspace: "@weather/store-observations"
+            directory: packages/store-observations
+            bucket: tempest-artifacts-store-prod-926898703023
+            stack_name: tempest-weather-store-lib
+          - package: fetch-observations
+            workspace: "@weather/fetch-observations"
+            directory: packages/fetch-observations
+            bucket: tempest-artifacts-fetch-prod-926898703023
+            stack_name: tempest-weather-fetch-lib
+          - package: refine-observations
+            workspace: "@weather/refine-observations"
+            directory: packages/refine-observations
+            bucket: tempest-artifacts-refine-prod-926898703023
+            stack_name: tempest-weather-refine-lib
     concurrency:
-      group: deploy-prod-store-observations
+      group: deploy-prod-${{ matrix.package }}
       cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-observations.yml
     with:
       checkout_ref: ${{ github.sha }}
-      package_workspace: "@weather/store-observations"
-      package_directory: packages/store-observations
-      artifact_bucket: tempest-artifacts-store-prod-926898703023
-      stack_name: tempest-weather-store-lib
-    secrets: inherit
-
-  deploy-fetch:
-    needs:
-      - parse-tag
-      - test-package
-      - create-deployment
-    if: needs.parse-tag.outputs.package == 'fetch-observations'
-    concurrency:
-      group: deploy-prod-fetch-observations
-      cancel-in-progress: false
-    uses: ./.github/workflows/reusable-deploy-sam-observations.yml
-    with:
-      checkout_ref: ${{ github.sha }}
-      package_workspace: "@weather/fetch-observations"
-      package_directory: packages/fetch-observations
-      artifact_bucket: tempest-artifacts-fetch-prod-926898703023
-      stack_name: tempest-weather-fetch-lib
-    secrets: inherit
-
-  deploy-refine:
-    needs:
-      - parse-tag
-      - test-package
-      - create-deployment
-    if: needs.parse-tag.outputs.package == 'refine-observations'
-    concurrency:
-      group: deploy-prod-refine-observations
-      cancel-in-progress: false
-    uses: ./.github/workflows/reusable-deploy-sam-observations.yml
-    with:
-      checkout_ref: ${{ github.sha }}
-      package_workspace: "@weather/refine-observations"
-      package_directory: packages/refine-observations
-      artifact_bucket: tempest-artifacts-refine-prod-926898703023
-      stack_name: tempest-weather-refine-lib
+      package_workspace: ${{ matrix.workspace }}
+      package_directory: ${{ matrix.directory }}
+      artifact_bucket: ${{ matrix.bucket }}
+      stack_name: ${{ matrix.stack_name }}
     secrets: inherit
 
   deploy-backfill:
@@ -209,111 +200,32 @@ jobs:
       checkout_ref: ${{ github.sha }}
     secrets: inherit
 
-  complete-deployment-store:
+  complete-deployment:
     needs:
       - parse-tag
       - create-deployment
-      - deploy-store
-    if: always() && needs.parse-tag.outputs.package == 'store-observations' && needs.create-deployment.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Mark GitHub deployment status
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const state = '${{ needs.deploy-store.result }}' === 'success' ? 'success' : 'failure';
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: Number('${{ needs.create-deployment.outputs.deployment_id }}'),
-              state,
-              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
-              description: `Deployment ${state}`
-            });
-
-  complete-deployment-fetch:
-    needs:
-      - parse-tag
-      - create-deployment
-      - deploy-fetch
-    if: always() && needs.parse-tag.outputs.package == 'fetch-observations' && needs.create-deployment.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Mark GitHub deployment status
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const state = '${{ needs.deploy-fetch.result }}' === 'success' ? 'success' : 'failure';
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: Number('${{ needs.create-deployment.outputs.deployment_id }}'),
-              state,
-              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
-              description: `Deployment ${state}`
-            });
-
-  complete-deployment-refine:
-    needs:
-      - parse-tag
-      - create-deployment
-      - deploy-refine
-    if: always() && needs.parse-tag.outputs.package == 'refine-observations' && needs.create-deployment.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Mark GitHub deployment status
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const state = '${{ needs.deploy-refine.result }}' === 'success' ? 'success' : 'failure';
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: Number('${{ needs.create-deployment.outputs.deployment_id }}'),
-              state,
-              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
-              description: `Deployment ${state}`
-            });
-
-  complete-deployment-backfill:
-    needs:
-      - parse-tag
-      - create-deployment
+      - deploy-observations
       - deploy-backfill
-    if: always() && needs.parse-tag.outputs.package == 'backfill-observations' && needs.create-deployment.result == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Mark GitHub deployment status
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const state = '${{ needs.deploy-backfill.result }}' === 'success' ? 'success' : 'failure';
-            await github.rest.repos.createDeploymentStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              deployment_id: Number('${{ needs.create-deployment.outputs.deployment_id }}'),
-              state,
-              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
-              description: `Deployment ${state}`
-            });
-
-  complete-deployment-role-policy:
-    needs:
-      - parse-tag
-      - create-deployment
       - deploy-role-policy
-    if: always() && needs.parse-tag.outputs.package == 'github-tempest-cfn-deploy-role' && needs.create-deployment.result == 'success'
+    if: always() && needs.parse-tag.outputs.supports_cloudformation == 'true' && needs.create-deployment.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Mark GitHub deployment status
         uses: actions/github-script@v7
         with:
           script: |
-            const state = '${{ needs.deploy-role-policy.result }}' === 'success' ? 'success' : 'failure';
+            const pkg = '${{ needs.parse-tag.outputs.package }}';
+            let result = 'failure';
+
+            if (['store-observations', 'fetch-observations', 'refine-observations'].includes(pkg)) {
+              result = '${{ needs.deploy-observations.result }}';
+            } else if (pkg === 'backfill-observations') {
+              result = '${{ needs.deploy-backfill.result }}';
+            } else if (pkg === 'github-tempest-cfn-deploy-role') {
+              result = '${{ needs.deploy-role-policy.result }}';
+            }
+
+            const state = result === 'success' ? 'success' : 'failure';
             await github.rest.repos.createDeploymentStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -329,17 +241,11 @@ jobs:
       - parse-tag
       - test-package
       - create-deployment
-      - deploy-store
-      - deploy-fetch
-      - deploy-refine
+      - deploy-observations
       - deploy-backfill
       - deploy-role-policy
       - deploy-cloud-computing
-      - complete-deployment-store
-      - complete-deployment-fetch
-      - complete-deployment-refine
-      - complete-deployment-backfill
-      - complete-deployment-role-policy
+      - complete-deployment
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -360,18 +266,9 @@ jobs:
             echo "|---|---|"
             echo "| create-deployment | \`${{ needs.create-deployment.result }}\` |"
             echo "| test-package | \`${{ needs.test-package.result }}\` |"
-            echo "| deploy-store | \`${{ needs.deploy-store.result }}\` |"
-            echo "| deploy-fetch | \`${{ needs.deploy-fetch.result }}\` |"
-            echo "| deploy-refine | \`${{ needs.deploy-refine.result }}\` |"
+            echo "| deploy-observations | \`${{ needs.deploy-observations.result }}\` |"
             echo "| deploy-backfill | \`${{ needs.deploy-backfill.result }}\` |"
             echo "| deploy-role-policy | \`${{ needs.deploy-role-policy.result }}\` |"
             echo "| deploy-cloud-computing | \`${{ needs.deploy-cloud-computing.result }}\` |"
+            echo "| complete-deployment | \`${{ needs.complete-deployment.result }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
-
-  test-package:
-    needs: parse-tag
-    uses: ./.github/workflows/reusable-run-package-tests.yml
-    with:
-      checkout_ref: ${{ github.sha }}
-      package: ${{ needs.parse-tag.outputs.package }}
-    secrets: inherit
