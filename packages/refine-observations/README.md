@@ -1,6 +1,5 @@
 # Refine Observations Package
 
-
 This package processes and refines raw weather observation data to improve its quality and usability. It applies data cleaning, transformation, and validation techniques to ensure that the observations are accurate, consistent, and ready for downstream analysis or storage. The package is designed to support robust data pipelines within the weather project.
 
 ## Installation
