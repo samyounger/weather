@@ -18,10 +18,10 @@ Parameters:
     Description: AWS region for deployed stacks and artifacts.
 
 Resources:
-  GitHubTempestCfnDeployRolePolicy:
-    Type: AWS::IAM::Policy
+  GitHubTempestCfnDeployRoleFoundationManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
     Properties:
-      PolicyName: GitHubTempestCfnDeployRolePolicy
+      ManagedPolicyName: GitHubTempestCfnDeployRoleFoundationPolicy
       Roles:
         - !Ref DeployRoleName
       PolicyDocument:
@@ -114,6 +114,52 @@ Resources:
               - !Sub arn:aws:lambda:${ArtifactRegion}:${ArtifactAccountId}:function:tempest-*
               - !Sub arn:aws:lambda:${ArtifactRegion}:${ArtifactAccountId}:layer:tempest-*
               - !Sub arn:aws:lambda:${ArtifactRegion}:${ArtifactAccountId}:layer:tempest-*:*
+          - Sid: ReadLegacyArtifactBuckets
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+            Resource:
+              - arn:aws:s3:::tempest-artifacts-store-*
+              - arn:aws:s3:::tempest-artifacts-store-*/*
+              - arn:aws:s3:::tempest-artifacts-fetch-*
+              - arn:aws:s3:::tempest-artifacts-fetch-*/*
+              - arn:aws:s3:::tempest-artifacts-refine-*
+              - arn:aws:s3:::tempest-artifacts-refine-*/*
+          - Sid: FixedArtifactBucketsAccess
+            Effect: Allow
+            Action:
+              - s3:CreateBucket
+              - s3:GetBucketLocation
+              - s3:ListBucket
+              - s3:PutLifecycleConfiguration
+              - s3:GetLifecycleConfiguration
+              - s3:PutObject
+              - s3:GetObject
+              - s3:DeleteObject
+              - s3:AbortMultipartUpload
+              - s3:ListBucketMultipartUploads
+              - s3:ListMultipartUploadParts
+            Resource:
+              - arn:aws:s3:::tempest-artifacts-store-prod*
+              - arn:aws:s3:::tempest-artifacts-store-prod*/*
+              - arn:aws:s3:::tempest-artifacts-fetch-prod*
+              - arn:aws:s3:::tempest-artifacts-fetch-prod*/*
+              - arn:aws:s3:::tempest-artifacts-refine-prod*
+              - arn:aws:s3:::tempest-artifacts-refine-prod*/*
+              - arn:aws:s3:::tempest-artifacts-backfill-prod*
+              - arn:aws:s3:::tempest-artifacts-backfill-prod*/*
+
+  GitHubTempestCfnDeployRoleDeploymentManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: GitHubTempestCfnDeployRoleDeploymentPolicy
+      Roles:
+        - !Ref DeployRoleName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
           - Sid: IAMManagedPolicyForTempest
             Effect: Allow
             Action:
@@ -176,42 +222,6 @@ Resources:
               - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-fetch-*
               - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-refine-*
               - !Sub arn:aws:iam::${ArtifactAccountId}:role/tempest-weather-backfill-*
-          - Sid: ReadLegacyArtifactBuckets
-            Effect: Allow
-            Action:
-              - s3:GetObject
-              - s3:GetObjectVersion
-              - s3:ListBucket
-            Resource:
-              - arn:aws:s3:::tempest-artifacts-store-*
-              - arn:aws:s3:::tempest-artifacts-store-*/*
-              - arn:aws:s3:::tempest-artifacts-fetch-*
-              - arn:aws:s3:::tempest-artifacts-fetch-*/*
-              - arn:aws:s3:::tempest-artifacts-refine-*
-              - arn:aws:s3:::tempest-artifacts-refine-*/*
-          - Sid: FixedArtifactBucketsAccess
-            Effect: Allow
-            Action:
-              - s3:CreateBucket
-              - s3:GetBucketLocation
-              - s3:ListBucket
-              - s3:PutLifecycleConfiguration
-              - s3:GetLifecycleConfiguration
-              - s3:PutObject
-              - s3:GetObject
-              - s3:DeleteObject
-              - s3:AbortMultipartUpload
-              - s3:ListBucketMultipartUploads
-              - s3:ListMultipartUploadParts
-            Resource:
-              - arn:aws:s3:::tempest-artifacts-store-prod*
-              - arn:aws:s3:::tempest-artifacts-store-prod*/*
-              - arn:aws:s3:::tempest-artifacts-fetch-prod*
-              - arn:aws:s3:::tempest-artifacts-fetch-prod*/*
-              - arn:aws:s3:::tempest-artifacts-refine-prod*
-              - arn:aws:s3:::tempest-artifacts-refine-prod*/*
-              - arn:aws:s3:::tempest-artifacts-backfill-prod*
-              - arn:aws:s3:::tempest-artifacts-backfill-prod*/*
           - Sid: EventBridgeRuleForTempest
             Effect: Allow
             Action:
@@ -260,6 +270,16 @@ Resources:
             Resource:
               - !Sub arn:aws:states:${ArtifactRegion}:${ArtifactAccountId}:stateMachine:tempest-weather-backfill-*
               - !Sub arn:aws:states:${ArtifactRegion}:${ArtifactAccountId}:stateMachine:BackfillStateMachine-*
+
+  GitHubTempestCfnDeployRoleAlertsManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: GitHubTempestCfnDeployRoleAlertsPolicy
+      Roles:
+        - !Ref DeployRoleName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
           - Sid: SnsAlertsForTempestStacks
             Effect: Allow
             Action:
@@ -290,10 +310,11 @@ Resources:
               - cloudwatch:UntagResource
               - cloudwatch:ListTagsForResource
             Resource: '*'
-  GitHubTempestCfnDeployRoleReadPolicy:
-    Type: AWS::IAM::Policy
+
+  GitHubTempestCfnDeployRoleReadManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
     Properties:
-      PolicyName: GitHubTempestCfnDeployRoleReadPolicy
+      ManagedPolicyName: GitHubTempestCfnDeployRoleReadPolicy
       Roles:
         - !Ref DeployRoleName
       PolicyDocument:
