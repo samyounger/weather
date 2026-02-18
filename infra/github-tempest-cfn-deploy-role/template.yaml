@@ -290,6 +290,22 @@ Resources:
               - cloudwatch:UntagResource
               - cloudwatch:ListTagsForResource
             Resource: '*'
+  GitHubTempestCfnDeployRoleReadPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: GitHubTempestCfnDeployRoleReadPolicy
+      Roles:
+        - !Ref DeployRoleName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ReadDeployRoleInlinePolicies
+            Effect: Allow
+            Action:
+              - iam:GetRole
+              - iam:GetRolePolicy
+              - iam:ListRolePolicies
+            Resource: !Sub arn:aws:iam::${ArtifactAccountId}:role/${DeployRoleName}
 
 Outputs:
   DeployRoleName:
