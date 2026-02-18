@@ -107,7 +107,7 @@ jobs:
     needs:
       - parse-tag
       - test-package
-    if: needs.parse-tag.outputs.supports_cloudformation == 'true' && needs.test-package.result == 'success'
+    if: needs.test-package.result == 'success'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -137,7 +137,7 @@ jobs:
               deployment_id: deployment.data.id,
               state: 'in_progress',
               log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
+              environment_url: '${{ needs.parse-tag.outputs.stack_url }}' || undefined,
               description: 'Deployment started'
             });
 
@@ -210,7 +210,8 @@ jobs:
       - deploy-observations
       - deploy-backfill
       - deploy-role-policy
-    if: always() && needs.parse-tag.outputs.supports_cloudformation == 'true' && needs.create-deployment.result == 'success'
+      - deploy-cloud-computing
+    if: always() && needs.create-deployment.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Mark GitHub deployment status
@@ -219,24 +220,39 @@ jobs:
           script: |
             const pkg = '${{ needs.parse-tag.outputs.package }}';
             let result = 'failure';
+            let failureReason = '';
+            let environmentUrl = '${{ needs.parse-tag.outputs.stack_url }}';
 
             if (['store-observations', 'fetch-observations', 'refine-observations'].includes(pkg)) {
               result = '${{ needs.deploy-observations.result }}';
+              failureReason = '${{ needs.deploy-observations.outputs.failure_reason }}';
+              environmentUrl = '${{ needs.deploy-observations.outputs.stack_url }}';
             } else if (pkg === 'backfill-observations') {
               result = '${{ needs.deploy-backfill.result }}';
+              failureReason = '${{ needs.deploy-backfill.outputs.failure_reason }}';
+              environmentUrl = '${{ needs.deploy-backfill.outputs.stack_url }}';
             } else if (pkg === 'github-tempest-cfn-deploy-role') {
               result = '${{ needs.deploy-role-policy.result }}';
+              failureReason = '${{ needs.deploy-role-policy.outputs.failure_reason }}';
+              environmentUrl = '${{ needs.deploy-role-policy.outputs.stack_url }}';
+            } else if (pkg === 'cloud-computing') {
+              result = '${{ needs.deploy-cloud-computing.result }}';
             }
 
             const state = result === 'success' ? 'success' : 'failure';
+            const shortReason = failureReason ? failureReason.slice(0, 120) : '';
+            const description = state === 'success'
+              ? 'Deployment succeeded'
+              : (shortReason ? `Failed: ${shortReason}` : 'Deployment failed. See workflow logs.');
+
             await github.rest.repos.createDeploymentStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
               deployment_id: Number('${{ needs.create-deployment.outputs.deployment_id }}'),
               state,
               log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
-              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
-              description: `Deployment ${state}`
+              environment_url: environmentUrl || undefined,
+              description
             });
 
   deployment-summary:
