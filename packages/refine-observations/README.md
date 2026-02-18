@@ -36,6 +36,7 @@ if is_valid:
 
 ## Features
 
+
 - Data cleaning: Handles missing values, removes duplicates, and corrects inconsistencies.
 - Data transformation: Normalizes data formats, scales numerical values, and encodes categorical variables.
 - Data validation: Ensures data quality by checking against predefined rules and constraints.
