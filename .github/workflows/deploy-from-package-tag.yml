@@ -1,0 +1,274 @@
+name: Deploy From Package Tag
+
+on:
+  push:
+    tags:
+      - "pkg/*/v*"
+
+permissions:
+  contents: read
+  deployments: write
+  id-token: write
+
+jobs:
+  parse-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      package: ${{ steps.parse.outputs.package }}
+      version: ${{ steps.parse.outputs.version }}
+      environment: ${{ steps.parse.outputs.environment }}
+      supports_cloudformation: ${{ steps.parse.outputs.supports_cloudformation }}
+      stack_name: ${{ steps.parse.outputs.stack_name }}
+      stack_url: ${{ steps.parse.outputs.stack_url }}
+    steps:
+      - name: Parse package tag
+        id: parse
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          # Expected format: pkg/<package>/v<semver>
+          package="${tag#pkg/}"
+          package="${package%%/v*}"
+          version="${tag##*/v}"
+
+          supports_cloudformation=false
+          environment=""
+          stack_name=""
+          stack_url=""
+          case "$package" in
+            store-observations|fetch-observations|refine-observations|backfill-observations)
+              supports_cloudformation=true
+              environment="prod-${package}"
+              ;;
+            github-tempest-cfn-deploy-role)
+              supports_cloudformation=true
+              environment="prod-github-tempest-cfn-deploy-role"
+              stack_name="tempest-github-cfn-deploy-role"
+              ;;
+            cloud-computing)
+              supports_cloudformation=false
+              environment="package-cloud-computing"
+              ;;
+          esac
+
+          case "$package" in
+            store-observations)
+              stack_name="tempest-weather-store-lib"
+              ;;
+            fetch-observations)
+              stack_name="tempest-weather-fetch-lib"
+              ;;
+            refine-observations)
+              stack_name="tempest-weather-refine-lib"
+              ;;
+            backfill-observations)
+              stack_name="tempest-weather-backfill-lib"
+              ;;
+          esac
+
+          if [ -n "$stack_name" ]; then
+            stack_url="https://eu-west-2.console.aws.amazon.com/cloudformation/home?region=eu-west-2#/stacks/stackinfo?stackId=${stack_name}"
+          fi
+
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "environment=$environment" >> "$GITHUB_OUTPUT"
+          echo "supports_cloudformation=$supports_cloudformation" >> "$GITHUB_OUTPUT"
+          echo "stack_name=$stack_name" >> "$GITHUB_OUTPUT"
+          echo "stack_url=$stack_url" >> "$GITHUB_OUTPUT"
+
+  test-package:
+    needs: parse-tag
+    uses: ./.github/workflows/reusable-run-package-tests.yml
+    with:
+      checkout_ref: ${{ github.sha }}
+      package: ${{ needs.parse-tag.outputs.package }}
+    secrets: inherit
+
+  create-deployment:
+    needs:
+      - parse-tag
+      - test-package
+    if: needs.parse-tag.outputs.supports_cloudformation == 'true' && needs.test-package.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_id: ${{ steps.create.outputs.deployment_id }}
+    steps:
+      - name: Create GitHub deployment
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.ref,
+              environment: '${{ needs.parse-tag.outputs.environment }}',
+              transient_environment: false,
+              production_environment: true,
+              auto_merge: false,
+              required_contexts: [],
+              description: 'Deploying ${{ needs.parse-tag.outputs.package }} ${{ needs.parse-tag.outputs.version }}'
+            });
+
+            core.setOutput('deployment_id', String(deployment.data.id));
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'in_progress',
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
+              description: 'Deployment started'
+            });
+
+  deploy-observations:
+    needs:
+      - parse-tag
+      - test-package
+      - create-deployment
+    if: contains(fromJSON('["store-observations","fetch-observations","refine-observations"]'), needs.parse-tag.outputs.package) && needs.parse-tag.outputs.package == matrix.package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: store-observations
+            workspace: "@weather/store-observations"
+            directory: packages/store-observations
+            bucket: tempest-artifacts-store-prod-926898703023
+            stack_name: tempest-weather-store-lib
+          - package: fetch-observations
+            workspace: "@weather/fetch-observations"
+            directory: packages/fetch-observations
+            bucket: tempest-artifacts-fetch-prod-926898703023
+            stack_name: tempest-weather-fetch-lib
+          - package: refine-observations
+            workspace: "@weather/refine-observations"
+            directory: packages/refine-observations
+            bucket: tempest-artifacts-refine-prod-926898703023
+            stack_name: tempest-weather-refine-lib
+    concurrency:
+      group: deploy-prod-${{ matrix.package }}
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-sam-observations.yml
+    with:
+      checkout_ref: ${{ github.sha }}
+      package_workspace: ${{ matrix.workspace }}
+      package_directory: ${{ matrix.directory }}
+      artifact_bucket: ${{ matrix.bucket }}
+      stack_name: ${{ matrix.stack_name }}
+    secrets: inherit
+
+  deploy-backfill:
+    needs:
+      - parse-tag
+      - test-package
+      - create-deployment
+    if: needs.parse-tag.outputs.package == 'backfill-observations'
+    concurrency:
+      group: deploy-prod-backfill-observations
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-sam-backfill.yml
+    with:
+      checkout_ref: ${{ github.sha }}
+      artifact_bucket: tempest-artifacts-backfill-prod-926898703023
+      stack_name: tempest-weather-backfill-lib
+    secrets: inherit
+
+  deploy-role-policy:
+    needs:
+      - parse-tag
+      - test-package
+      - create-deployment
+    if: needs.parse-tag.outputs.package == 'github-tempest-cfn-deploy-role'
+    concurrency:
+      group: deploy-prod-github-tempest-cfn-deploy-role
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-role-policy.yml
+    with:
+      checkout_ref: ${{ github.sha }}
+    secrets: inherit
+
+  deploy-cloud-computing:
+    needs:
+      - parse-tag
+      - test-package
+    if: needs.parse-tag.outputs.package == 'cloud-computing'
+    uses: ./.github/workflows/reusable-deploy-cloud-computing.yml
+    with:
+      checkout_ref: ${{ github.sha }}
+    secrets: inherit
+
+  complete-deployment:
+    needs:
+      - parse-tag
+      - create-deployment
+      - deploy-observations
+      - deploy-backfill
+      - deploy-role-policy
+    if: always() && needs.parse-tag.outputs.supports_cloudformation == 'true' && needs.create-deployment.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark GitHub deployment status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pkg = '${{ needs.parse-tag.outputs.package }}';
+            let result = 'failure';
+
+            if (['store-observations', 'fetch-observations', 'refine-observations'].includes(pkg)) {
+              result = '${{ needs.deploy-observations.result }}';
+            } else if (pkg === 'backfill-observations') {
+              result = '${{ needs.deploy-backfill.result }}';
+            } else if (pkg === 'github-tempest-cfn-deploy-role') {
+              result = '${{ needs.deploy-role-policy.result }}';
+            }
+
+            const state = result === 'success' ? 'success' : 'failure';
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number('${{ needs.create-deployment.outputs.deployment_id }}'),
+              state,
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.parse-tag.outputs.stack_url }}',
+              description: `Deployment ${state}`
+            });
+
+  deployment-summary:
+    needs:
+      - parse-tag
+      - test-package
+      - create-deployment
+      - deploy-observations
+      - deploy-backfill
+      - deploy-role-policy
+      - deploy-cloud-computing
+      - complete-deployment
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write summary
+        run: |
+          {
+            echo "## Deploy From Tag Summary"
+            echo
+            echo "- Tag: \`${{ github.ref_name }}\`"
+            echo "- Package: \`${{ needs.parse-tag.outputs.package }}\`"
+            echo "- Version: \`${{ needs.parse-tag.outputs.version }}\`"
+            echo "- Environment: \`${{ needs.parse-tag.outputs.environment }}\`"
+            echo "- CloudFormation package: \`${{ needs.parse-tag.outputs.supports_cloudformation }}\`"
+            echo "- CloudFormation stack: \`${{ needs.parse-tag.outputs.stack_name }}\`"
+            echo "- Stack URL: ${{ needs.parse-tag.outputs.stack_url }}"
+            echo
+            echo "| Job | Result |"
+            echo "|---|---|"
+            echo "| create-deployment | \`${{ needs.create-deployment.result }}\` |"
+            echo "| test-package | \`${{ needs.test-package.result }}\` |"
+            echo "| deploy-observations | \`${{ needs.deploy-observations.result }}\` |"
+            echo "| deploy-backfill | \`${{ needs.deploy-backfill.result }}\` |"
+            echo "| deploy-role-policy | \`${{ needs.deploy-role-policy.result }}\` |"
+            echo "| deploy-cloud-computing | \`${{ needs.deploy-cloud-computing.result }}\` |"
+            echo "| complete-deployment | \`${{ needs.complete-deployment.result }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

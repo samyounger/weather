@@ -14,35 +14,53 @@ $ npm install
 $ npm run start
 ```
 
-## Deployment
+## Deployments
 
-Deployments are managed with AWS SAM config (`samconfig.toml`) in each deployable package.
-Artifact buckets are fixed via `s3_bucket` in `samconfig.toml`, and GitHub Actions applies an S3 lifecycle policy to expire old deployment artifacts automatically.
+Deployments are tag-driven.
 
-### AWS Authentication
-Make sure you have the AWS CLI installed and configured with appropriate credentials.
-`$ aws configure`
+### How it works
+1. A PR is merged to `main`.
+2. `.github/workflows/tag-packages-on-merge.yml` checks changed files and dependency impact per package.
+3. For each affected package, the workflow creates a package-scoped semver tag:
+   - `pkg/store-observations/vX.Y.Z`
+   - `pkg/fetch-observations/vX.Y.Z`
+   - `pkg/refine-observations/vX.Y.Z`
+   - `pkg/backfill-observations/vX.Y.Z`
+   - `pkg/cloud-computing/vX.Y.Z`
+   - `pkg/github-tempest-cfn-deploy-role/vX.Y.Z` (IAM deploy-role policy stack)
+4. Tag push triggers `.github/workflows/deploy-from-package-tag.yml`.
+5. The tag deploy workflow:
+   - creates a GitHub Deployment record per environment
+   - runs the package deployment via reusable workflows
+   - updates deployment status to `success` or `failure`
+   - writes a run summary to `$GITHUB_STEP_SUMMARY`
 
-If you are using [AWS SSO](https://aws.amazon.com/blogs/security/how-to-configure-the-aws-cli-to-use-aws-single-sign-on/), run the following command before deploying:
-`$ aws sso login`
+### Reusable deployment workflows
+- `.github/workflows/reusable-deploy-sam-observations.yml`
+- `.github/workflows/reusable-deploy-sam-backfill.yml`
+- `.github/workflows/reusable-deploy-cloud-computing.yml`
+- `.github/workflows/reusable-deploy-role-policy.yml`
 
-### Deploy store package
+### Required GitHub repository variables
+- `AWS_IAM_DEPLOY_ROLE_ARN`
+- `AWS_IAM_BOOTSTRAP_DEPLOY_ROLE_ARN`
+- `ALERT_EMAIL`
+- `TEMPEST_HOST`
+- `TEMPEST_DEVICE_ID`
+- `TEMPEST_STATION_ID`
+
+### Required GitHub repository secrets
+- `TEMPEST_TOKEN`
+
+### Local/manual AWS SAM deploy (optional)
+Deployments in CI are tag-driven, but local deploy is still available.
+
 `$ npm run deploy --workspace=@weather/store-observations`
-
-### Destroy store infrastructure
-`$ npm run deploy:cleanup --workspace=@weather/store-observations`
-
-### Deploy fetch package
 `$ npm run deploy --workspace=@weather/fetch-observations`
-
-### Destroy fetch infrastructure
-`$ npm run deploy:cleanup --workspace=@weather/fetch-observations`
-
-### Deploy refine package
 `$ npm run deploy --workspace=@weather/refine-observations`
+`$ npm run deploy --workspace=@weather/backfill-observations`
 
-### Destroy refine infrastructure
-`$ npm run deploy:cleanup --workspace=@weather/refine-observations`
+Infrastructure settings such as stack name, region, and artifact bucket are defined in each package's `samconfig.toml`.
 
 ## Refine Observations Logic
 

@@ -1,0 +1,126 @@
+name: Detect Package Changes
+description: Detects package changes including shared dependency rules.
+
+inputs:
+  base_sha:
+    description: Base commit SHA for diff
+    required: true
+  head_sha:
+    description: Head commit SHA for diff
+    required: true
+  include_workflow_dependencies:
+    description: Include workflow file dependencies that should trigger package deploys
+    required: false
+    default: "false"
+
+outputs:
+  cloud:
+    description: Whether cloud-computing package should be considered changed
+    value: ${{ steps.detect.outputs.cloud }}
+  store:
+    description: Whether store-observations package should be considered changed
+    value: ${{ steps.detect.outputs.store }}
+  fetch:
+    description: Whether fetch-observations package should be considered changed
+    value: ${{ steps.detect.outputs.fetch }}
+  refine:
+    description: Whether refine-observations package should be considered changed
+    value: ${{ steps.detect.outputs.refine }}
+  backfill:
+    description: Whether backfill-observations package should be considered changed
+    value: ${{ steps.detect.outputs.backfill }}
+  deploy_role:
+    description: Whether role-policy deployment should be considered changed
+    value: ${{ steps.detect.outputs.deploy_role }}
+
+runs:
+  using: composite
+  steps:
+    - name: Detect package changes
+      id: detect
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        base_sha="${{ inputs.base_sha }}"
+        head_sha="${{ inputs.head_sha }}"
+        include_workflow_deps="${{ inputs.include_workflow_dependencies }}"
+
+        cloud=false
+        store=false
+        fetch=false
+        refine=false
+        backfill=false
+        deploy_role=false
+
+        if ! git cat-file -e "${base_sha}^{commit}" >/dev/null 2>&1 || ! git cat-file -e "${head_sha}^{commit}" >/dev/null 2>&1; then
+          cloud=true
+          store=true
+          fetch=true
+          refine=true
+          backfill=true
+          deploy_role=true
+        else
+          changed_files="$(git diff --name-only "$base_sha" "$head_sha")"
+          while IFS= read -r file; do
+            case "$file" in
+              packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
+                cloud=true
+                ;;
+            esac
+
+            case "$file" in
+              packages/store-observations/*|packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
+                store=true
+                ;;
+            esac
+
+            case "$file" in
+              packages/fetch-observations/*|packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
+                fetch=true
+                ;;
+            esac
+
+            case "$file" in
+              packages/refine-observations/*|packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
+                refine=true
+                ;;
+            esac
+
+            case "$file" in
+              packages/backfill-observations/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
+                backfill=true
+                ;;
+            esac
+
+            case "$file" in
+              infra/github-tempest-cfn-deploy-role/*|.github/workflows/reusable-deploy-role-policy.yml)
+                deploy_role=true
+                ;;
+            esac
+
+            if [ "$include_workflow_deps" = "true" ]; then
+
+              case "$file" in
+                .github/workflows/reusable-deploy-sam-observations.yml)
+                  store=true
+                  fetch=true
+                  refine=true
+                  ;;
+              esac
+
+              case "$file" in
+                .github/workflows/reusable-deploy-sam-backfill.yml)
+                  backfill=true
+                  ;;
+              esac
+            fi
+          done <<< "$changed_files"
+        fi
+
+        echo "cloud=$cloud" >> "$GITHUB_OUTPUT"
+        echo "store=$store" >> "$GITHUB_OUTPUT"
+        echo "fetch=$fetch" >> "$GITHUB_OUTPUT"
+        echo "refine=$refine" >> "$GITHUB_OUTPUT"
+        echo "backfill=$backfill" >> "$GITHUB_OUTPUT"
+        echo "deploy_role=$deploy_role" >> "$GITHUB_OUTPUT"
