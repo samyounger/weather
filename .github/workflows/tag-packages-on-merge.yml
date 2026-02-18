@@ -20,6 +20,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.merge_commit_sha }}
+          persist-credentials: false
 
       - name: Determine semver bump level
         id: bump
@@ -60,6 +61,16 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Configure remote for tag push trigger token
+        env:
+          TAG_PUSH_TOKEN: ${{ secrets.TAG_PUSH_TOKEN }}
+        run: |
+          if [ -z "${TAG_PUSH_TOKEN:-}" ]; then
+            echo "Repository secret TAG_PUSH_TOKEN must be set to a PAT or GitHub App token with repo contents:write."
+            exit 1
+          fi
+          git remote set-url origin "https://x-access-token:${TAG_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
       - name: Create and push package tags
         env:
