@@ -20,6 +20,7 @@ jobs:
       supports_cloudformation: ${{ steps.parse.outputs.supports_cloudformation }}
       stack_name: ${{ steps.parse.outputs.stack_name }}
       stack_url: ${{ steps.parse.outputs.stack_url }}
+      observations_matrix: ${{ steps.parse.outputs.observations_matrix }}
     steps:
       - name: Parse package tag
         id: parse
@@ -35,6 +36,7 @@ jobs:
           environment=""
           stack_name=""
           stack_url=""
+          observations_matrix='[]'
           case "$package" in
             store-observations|fetch-observations|refine-observations|backfill-observations)
               supports_cloudformation=true
@@ -54,12 +56,15 @@ jobs:
           case "$package" in
             store-observations)
               stack_name="tempest-weather-store-lib"
+              observations_matrix='[{"package":"store-observations","workspace":"@weather/store-observations","directory":"packages/store-observations","bucket":"tempest-artifacts-store-prod-926898703023","stack_name":"tempest-weather-store-lib"}]'
               ;;
             fetch-observations)
               stack_name="tempest-weather-fetch-lib"
+              observations_matrix='[{"package":"fetch-observations","workspace":"@weather/fetch-observations","directory":"packages/fetch-observations","bucket":"tempest-artifacts-fetch-prod-926898703023","stack_name":"tempest-weather-fetch-lib"}]'
               ;;
             refine-observations)
               stack_name="tempest-weather-refine-lib"
+              observations_matrix='[{"package":"refine-observations","workspace":"@weather/refine-observations","directory":"packages/refine-observations","bucket":"tempest-artifacts-refine-prod-926898703023","stack_name":"tempest-weather-refine-lib"}]'
               ;;
             backfill-observations)
               stack_name="tempest-weather-backfill-lib"
@@ -76,6 +81,7 @@ jobs:
           echo "supports_cloudformation=$supports_cloudformation" >> "$GITHUB_OUTPUT"
           echo "stack_name=$stack_name" >> "$GITHUB_OUTPUT"
           echo "stack_url=$stack_url" >> "$GITHUB_OUTPUT"
+          echo "observations_matrix=$observations_matrix" >> "$GITHUB_OUTPUT"
 
   test-package:
     needs: parse-tag
@@ -128,26 +134,11 @@ jobs:
       - parse-tag
       - test-package
       - create-deployment
-    if: contains(fromJSON('["store-observations","fetch-observations","refine-observations"]'), needs.parse-tag.outputs.package) && needs.parse-tag.outputs.package == matrix.package
+    if: contains(fromJSON('["store-observations","fetch-observations","refine-observations"]'), needs.parse-tag.outputs.package)
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - package: store-observations
-            workspace: "@weather/store-observations"
-            directory: packages/store-observations
-            bucket: tempest-artifacts-store-prod-926898703023
-            stack_name: tempest-weather-store-lib
-          - package: fetch-observations
-            workspace: "@weather/fetch-observations"
-            directory: packages/fetch-observations
-            bucket: tempest-artifacts-fetch-prod-926898703023
-            stack_name: tempest-weather-fetch-lib
-          - package: refine-observations
-            workspace: "@weather/refine-observations"
-            directory: packages/refine-observations
-            bucket: tempest-artifacts-refine-prod-926898703023
-            stack_name: tempest-weather-refine-lib
+        include: ${{ fromJSON(needs.parse-tag.outputs.observations_matrix) }}
     concurrency:
       group: deploy-prod-${{ matrix.package }}
       cancel-in-progress: false
