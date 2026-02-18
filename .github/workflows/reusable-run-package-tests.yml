@@ -1,0 +1,71 @@
+name: Reusable Run Package Tests
+
+on:
+  workflow_call:
+    inputs:
+      checkout_ref:
+        required: true
+        type: string
+      package:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run targeted unit tests for package and dependencies
+        env:
+          TARGET_PACKAGE: ${{ inputs.package }}
+        run: |
+          set -euo pipefail
+
+          run_workspace_tests() {
+            local workspace="$1"
+            echo "Running test:coverage for $workspace"
+            npm run test:coverage --workspace="$workspace"
+          }
+
+          case "$TARGET_PACKAGE" in
+            store-observations)
+              run_workspace_tests "@weather/cloud-computing"
+              run_workspace_tests "@weather/store-observations"
+              ;;
+            fetch-observations)
+              run_workspace_tests "@weather/cloud-computing"
+              run_workspace_tests "@weather/fetch-observations"
+              ;;
+            refine-observations)
+              run_workspace_tests "@weather/cloud-computing"
+              run_workspace_tests "@weather/refine-observations"
+              ;;
+            backfill-observations)
+              run_workspace_tests "@weather/backfill-observations"
+              ;;
+            cloud-computing)
+              run_workspace_tests "@weather/cloud-computing"
+              ;;
+            github-tempest-cfn-deploy-role)
+              echo "No package unit tests required for deploy-role policy package."
+              ;;
+            *)
+              echo "Unsupported package: $TARGET_PACKAGE"
+              exit 1
+              ;;
+          esac

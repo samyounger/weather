@@ -78,8 +78,10 @@ jobs:
           echo "stack_url=$stack_url" >> "$GITHUB_OUTPUT"
 
   create-deployment:
-    needs: parse-tag
-    if: needs.parse-tag.outputs.supports_cloudformation == 'true'
+    needs:
+      - parse-tag
+      - test-package
+    if: needs.parse-tag.outputs.supports_cloudformation == 'true' && needs.test-package.result == 'success'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -116,6 +118,7 @@ jobs:
   deploy-store:
     needs:
       - parse-tag
+      - test-package
       - create-deployment
     if: needs.parse-tag.outputs.package == 'store-observations'
     concurrency:
@@ -133,6 +136,7 @@ jobs:
   deploy-fetch:
     needs:
       - parse-tag
+      - test-package
       - create-deployment
     if: needs.parse-tag.outputs.package == 'fetch-observations'
     concurrency:
@@ -150,6 +154,7 @@ jobs:
   deploy-refine:
     needs:
       - parse-tag
+      - test-package
       - create-deployment
     if: needs.parse-tag.outputs.package == 'refine-observations'
     concurrency:
@@ -167,6 +172,7 @@ jobs:
   deploy-backfill:
     needs:
       - parse-tag
+      - test-package
       - create-deployment
     if: needs.parse-tag.outputs.package == 'backfill-observations'
     concurrency:
@@ -182,6 +188,7 @@ jobs:
   deploy-role-policy:
     needs:
       - parse-tag
+      - test-package
       - create-deployment
     if: needs.parse-tag.outputs.package == 'github-tempest-cfn-deploy-role'
     concurrency:
@@ -193,7 +200,9 @@ jobs:
     secrets: inherit
 
   deploy-cloud-computing:
-    needs: parse-tag
+    needs:
+      - parse-tag
+      - test-package
     if: needs.parse-tag.outputs.package == 'cloud-computing'
     uses: ./.github/workflows/reusable-deploy-cloud-computing.yml
     with:
@@ -318,6 +327,7 @@ jobs:
   deployment-summary:
     needs:
       - parse-tag
+      - test-package
       - create-deployment
       - deploy-store
       - deploy-fetch
@@ -349,6 +359,7 @@ jobs:
             echo "| Job | Result |"
             echo "|---|---|"
             echo "| create-deployment | \`${{ needs.create-deployment.result }}\` |"
+            echo "| test-package | \`${{ needs.test-package.result }}\` |"
             echo "| deploy-store | \`${{ needs.deploy-store.result }}\` |"
             echo "| deploy-fetch | \`${{ needs.deploy-fetch.result }}\` |"
             echo "| deploy-refine | \`${{ needs.deploy-refine.result }}\` |"
@@ -356,3 +367,11 @@ jobs:
             echo "| deploy-role-policy | \`${{ needs.deploy-role-policy.result }}\` |"
             echo "| deploy-cloud-computing | \`${{ needs.deploy-cloud-computing.result }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  test-package:
+    needs: parse-tag
+    uses: ./.github/workflows/reusable-run-package-tests.yml
+    with:
+      checkout_ref: ${{ github.sha }}
+      package: ${{ needs.parse-tag.outputs.package }}
+    secrets: inherit
