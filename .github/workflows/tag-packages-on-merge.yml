@@ -1,4 +1,4 @@
-name: Tag Packages On Merge
+name: Tag And Deploy Packages On Merge
 
 on:
   pull_request:
@@ -9,11 +9,27 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
-  tag-packages:
+  prepare-release:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    outputs:
+      merge_sha: ${{ steps.meta.outputs.merge_sha }}
+      bump: ${{ steps.bump.outputs.bump }}
+      cloud_changed: ${{ steps.changed.outputs.cloud }}
+      store_changed: ${{ steps.changed.outputs.store }}
+      fetch_changed: ${{ steps.changed.outputs.fetch }}
+      refine_changed: ${{ steps.changed.outputs.refine }}
+      backfill_changed: ${{ steps.changed.outputs.backfill }}
+      role_changed: ${{ steps.changed.outputs.deploy_role }}
+      cloud_tag: ${{ steps.tags.outputs.cloud_tag }}
+      store_tag: ${{ steps.tags.outputs.store_tag }}
+      fetch_tag: ${{ steps.tags.outputs.fetch_tag }}
+      refine_tag: ${{ steps.tags.outputs.refine_tag }}
+      backfill_tag: ${{ steps.tags.outputs.backfill_tag }}
+      role_tag: ${{ steps.tags.outputs.role_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -21,6 +37,11 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.merge_commit_sha }}
           persist-credentials: false
+
+      - name: Capture merge metadata
+        id: meta
+        run: |
+          echo "merge_sha=${{ github.event.pull_request.merge_commit_sha }}" >> "$GITHUB_OUTPUT"
 
       - name: Determine semver bump level
         id: bump
@@ -73,6 +94,7 @@ jobs:
           git remote set-url origin "https://x-access-token:${TAG_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
       - name: Create and push package tags
+        id: tags
         env:
           BUMP: ${{ steps.bump.outputs.bump }}
           CLOUD_CHANGED: ${{ steps.changed.outputs.cloud }}
@@ -105,7 +127,10 @@ jobs:
           create_tag_for_package() {
             local package="$1"
             local changed="$2"
+            local output_key="$3"
+
             if [ "$changed" != "true" ]; then
+              echo "${output_key}=" >> "$GITHUB_OUTPUT"
               return 0
             fi
 
@@ -122,17 +147,203 @@ jobs:
 
             if git rev-parse "$tag" >/dev/null 2>&1; then
               echo "Tag already exists, skipping: $tag"
-              return 0
+            else
+              git tag -a "$tag" -m "Release ${package} ${next}"
+              git push origin "$tag"
+              echo "Published tag: $tag"
             fi
 
-            git tag -a "$tag" -m "Release ${package} ${next}"
-            git push origin "$tag"
-            echo "Published tag: $tag"
+            echo "${output_key}=$tag" >> "$GITHUB_OUTPUT"
           }
 
-          create_tag_for_package "cloud-computing" "$CLOUD_CHANGED"
-          create_tag_for_package "store-observations" "$STORE_CHANGED"
-          create_tag_for_package "fetch-observations" "$FETCH_CHANGED"
-          create_tag_for_package "refine-observations" "$REFINE_CHANGED"
-          create_tag_for_package "backfill-observations" "$BACKFILL_CHANGED"
-          create_tag_for_package "github-tempest-cfn-deploy-role" "$ROLE_CHANGED"
+          create_tag_for_package "cloud-computing" "$CLOUD_CHANGED" "cloud_tag"
+          create_tag_for_package "store-observations" "$STORE_CHANGED" "store_tag"
+          create_tag_for_package "fetch-observations" "$FETCH_CHANGED" "fetch_tag"
+          create_tag_for_package "refine-observations" "$REFINE_CHANGED" "refine_tag"
+          create_tag_for_package "backfill-observations" "$BACKFILL_CHANGED" "backfill_tag"
+          create_tag_for_package "github-tempest-cfn-deploy-role" "$ROLE_CHANGED" "role_tag"
+
+  test-cloud:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.cloud_changed == 'true'
+    uses: ./.github/workflows/reusable-run-package-tests.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      package: cloud-computing
+    secrets: inherit
+
+  test-store:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.store_changed == 'true'
+    uses: ./.github/workflows/reusable-run-package-tests.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      package: store-observations
+    secrets: inherit
+
+  test-fetch:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.fetch_changed == 'true'
+    uses: ./.github/workflows/reusable-run-package-tests.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      package: fetch-observations
+    secrets: inherit
+
+  test-refine:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.refine_changed == 'true'
+    uses: ./.github/workflows/reusable-run-package-tests.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      package: refine-observations
+    secrets: inherit
+
+  test-backfill:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.backfill_changed == 'true'
+    uses: ./.github/workflows/reusable-run-package-tests.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      package: backfill-observations
+    secrets: inherit
+
+  deploy-cloud:
+    needs:
+      - prepare-release
+      - test-cloud
+    if: needs.prepare-release.outputs.cloud_changed == 'true' && needs.test-cloud.result == 'success'
+    uses: ./.github/workflows/reusable-deploy-cloud-computing.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+    secrets: inherit
+
+  deploy-store:
+    needs:
+      - prepare-release
+      - test-store
+    if: needs.prepare-release.outputs.store_changed == 'true' && needs.test-store.result == 'success'
+    concurrency:
+      group: deploy-prod-store-observations
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-sam-observations.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      package_workspace: "@weather/store-observations"
+      package_directory: packages/store-observations
+      artifact_bucket: tempest-artifacts-store-prod-926898703023
+      stack_name: tempest-weather-store-lib
+    secrets: inherit
+
+  deploy-fetch:
+    needs:
+      - prepare-release
+      - test-fetch
+    if: needs.prepare-release.outputs.fetch_changed == 'true' && needs.test-fetch.result == 'success'
+    concurrency:
+      group: deploy-prod-fetch-observations
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-sam-observations.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      package_workspace: "@weather/fetch-observations"
+      package_directory: packages/fetch-observations
+      artifact_bucket: tempest-artifacts-fetch-prod-926898703023
+      stack_name: tempest-weather-fetch-lib
+    secrets: inherit
+
+  deploy-refine:
+    needs:
+      - prepare-release
+      - test-refine
+    if: needs.prepare-release.outputs.refine_changed == 'true' && needs.test-refine.result == 'success'
+    concurrency:
+      group: deploy-prod-refine-observations
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-sam-observations.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      package_workspace: "@weather/refine-observations"
+      package_directory: packages/refine-observations
+      artifact_bucket: tempest-artifacts-refine-prod-926898703023
+      stack_name: tempest-weather-refine-lib
+    secrets: inherit
+
+  deploy-backfill:
+    needs:
+      - prepare-release
+      - test-backfill
+    if: needs.prepare-release.outputs.backfill_changed == 'true' && needs.test-backfill.result == 'success'
+    concurrency:
+      group: deploy-prod-backfill-observations
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-sam-backfill.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      artifact_bucket: tempest-artifacts-backfill-prod-926898703023
+      stack_name: tempest-weather-backfill-lib
+    secrets: inherit
+
+  deploy-role-policy:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.role_changed == 'true'
+    concurrency:
+      group: deploy-prod-github-tempest-cfn-deploy-role
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-role-policy.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+    secrets: inherit
+
+  release-summary:
+    needs:
+      - prepare-release
+      - test-cloud
+      - test-store
+      - test-fetch
+      - test-refine
+      - test-backfill
+      - deploy-cloud
+      - deploy-store
+      - deploy-fetch
+      - deploy-refine
+      - deploy-backfill
+      - deploy-role-policy
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write consolidated summary
+        run: |
+          {
+            echo "## Merge Release + Deploy Summary"
+            echo
+            echo "- Merge commit: \`${{ needs.prepare-release.outputs.merge_sha }}\`"
+            echo "- Semver bump: \`${{ needs.prepare-release.outputs.bump }}\`"
+            echo
+            echo "### Tags"
+            echo
+            echo "| Package | Changed | Tag |"
+            echo "|---|---|---|"
+            echo "| cloud-computing | \`${{ needs.prepare-release.outputs.cloud_changed }}\` | \`${{ needs.prepare-release.outputs.cloud_tag }}\` |"
+            echo "| store-observations | \`${{ needs.prepare-release.outputs.store_changed }}\` | \`${{ needs.prepare-release.outputs.store_tag }}\` |"
+            echo "| fetch-observations | \`${{ needs.prepare-release.outputs.fetch_changed }}\` | \`${{ needs.prepare-release.outputs.fetch_tag }}\` |"
+            echo "| refine-observations | \`${{ needs.prepare-release.outputs.refine_changed }}\` | \`${{ needs.prepare-release.outputs.refine_tag }}\` |"
+            echo "| backfill-observations | \`${{ needs.prepare-release.outputs.backfill_changed }}\` | \`${{ needs.prepare-release.outputs.backfill_tag }}\` |"
+            echo "| github-tempest-cfn-deploy-role | \`${{ needs.prepare-release.outputs.role_changed }}\` | \`${{ needs.prepare-release.outputs.role_tag }}\` |"
+            echo
+            echo "### Job Results"
+            echo
+            echo "| Job | Result |"
+            echo "|---|---|"
+            echo "| test-cloud | \`${{ needs.test-cloud.result }}\` |"
+            echo "| test-store | \`${{ needs.test-store.result }}\` |"
+            echo "| test-fetch | \`${{ needs.test-fetch.result }}\` |"
+            echo "| test-refine | \`${{ needs.test-refine.result }}\` |"
+            echo "| test-backfill | \`${{ needs.test-backfill.result }}\` |"
+            echo "| deploy-cloud | \`${{ needs.deploy-cloud.result }}\` |"
+            echo "| deploy-store | \`${{ needs.deploy-store.result }}\` |"
+            echo "| deploy-fetch | \`${{ needs.deploy-fetch.result }}\` |"
+            echo "| deploy-refine | \`${{ needs.deploy-refine.result }}\` |"
+            echo "| deploy-backfill | \`${{ needs.deploy-backfill.result }}\` |"
+            echo "| deploy-role-policy | \`${{ needs.deploy-role-policy.result }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,9 +1,12 @@
 name: Deploy From Package Tag
 
 on:
-  push:
-    tags:
-      - "pkg/*/v*"
+  workflow_dispatch:
+    inputs:
+      package_tag:
+        description: "Tag in format pkg/<package>/v<semver>"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -26,8 +29,13 @@ jobs:
         id: parse
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
+          tag="${{ inputs.package_tag }}"
           # Expected format: pkg/<package>/v<semver>
+          if ! echo "$tag" | grep -Eq '^pkg/.+/v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Invalid package_tag format: $tag"
+            exit 1
+          fi
+
           package="${tag#pkg/}"
           package="${package%%/v*}"
           version="${tag##*/v}"
@@ -50,6 +58,10 @@ jobs:
             cloud-computing)
               supports_cloudformation=false
               environment="package-cloud-computing"
+              ;;
+            *)
+              echo "Unsupported package in tag: $package"
+              exit 1
               ;;
           esac
 
@@ -245,7 +257,7 @@ jobs:
           {
             echo "## Deploy From Tag Summary"
             echo
-            echo "- Tag: \`${{ github.ref_name }}\`"
+            echo "- Tag: \`${{ inputs.package_tag }}\`"
             echo "- Package: \`${{ needs.parse-tag.outputs.package }}\`"
             echo "- Version: \`${{ needs.parse-tag.outputs.version }}\`"
             echo "- Environment: \`${{ needs.parse-tag.outputs.environment }}\`"
