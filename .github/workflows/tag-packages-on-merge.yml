@@ -64,6 +64,7 @@ jobs:
           FETCH_CHANGED: ${{ steps.changed.outputs.fetch }}
           REFINE_CHANGED: ${{ steps.changed.outputs.refine }}
           BACKFILL_CHANGED: ${{ steps.changed.outputs.backfill }}
+          ROLE_CHANGED: ${{ steps.changed.outputs.deploy_role }}
         run: |
           set -euo pipefail
 
@@ -118,3 +119,4 @@ jobs:
           create_tag_for_package "fetch-observations" "$FETCH_CHANGED"
           create_tag_for_package "refine-observations" "$REFINE_CHANGED"
           create_tag_for_package "backfill-observations" "$BACKFILL_CHANGED"
+          create_tag_for_package "github-tempest-cfn-deploy-role" "$ROLE_CHANGED"

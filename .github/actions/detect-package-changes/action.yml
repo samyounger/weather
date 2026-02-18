@@ -93,12 +93,13 @@ runs:
                 ;;
             esac
 
+            case "$file" in
+              infra/github-tempest-cfn-deploy-role/*|.github/workflows/reusable-deploy-role-policy.yml)
+                deploy_role=true
+                ;;
+            esac
+
             if [ "$include_workflow_deps" = "true" ]; then
-              case "$file" in
-                infra/github-tempest-cfn-deploy-role/*|.github/workflows/reusable-deploy-role-policy.yml|.github/workflows/deploy-pipeline.yml)
-                  deploy_role=true
-                  ;;
-              esac
 
               case "$file" in
                 .github/workflows/reusable-deploy-sam-observations.yml)
