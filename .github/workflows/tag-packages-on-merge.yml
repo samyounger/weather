@@ -56,6 +56,11 @@ jobs:
           head_sha: ${{ github.event.pull_request.merge_commit_sha }}
           include_workflow_dependencies: "false"
 
+      - name: Configure git committer identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Create and push package tags
         env:
           BUMP: ${{ steps.bump.outputs.bump }}
