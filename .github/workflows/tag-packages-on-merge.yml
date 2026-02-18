@@ -20,6 +20,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.merge_commit_sha }}
+          persist-credentials: false
 
       - name: Determine semver bump level
         id: bump
@@ -30,17 +31,17 @@ jobs:
           title="$(jq -r '.pull_request.title' "$GITHUB_EVENT_PATH")"
           body="$(jq -r '.pull_request.body // ""' "$GITHUB_EVENT_PATH")"
 
-          if echo "$labels" | rg -q '^semver:major$'; then
+          if echo "$labels" | grep -Eq '^semver:major$'; then
             bump="major"
-          elif echo "$labels" | rg -q '^semver:minor$'; then
+          elif echo "$labels" | grep -Eq '^semver:minor$'; then
             bump="minor"
-          elif echo "$labels" | rg -q '^semver:patch$'; then
+          elif echo "$labels" | grep -Eq '^semver:patch$'; then
             bump="patch"
-          elif printf '%s\n%s' "$title" "$body" | rg -q 'BREAKING CHANGE'; then
+          elif printf '%s\n%s' "$title" "$body" | grep -Eq 'BREAKING CHANGE'; then
             bump="major"
-          elif echo "$title" | rg -q '^[^:]+!:'; then
+          elif echo "$title" | grep -Eq '^[^:]+!:'; then
             bump="major"
-          elif echo "$title" | rg -q '^feat(\(.+\))?:'; then
+          elif echo "$title" | grep -Eq '^feat(\(.+\))?:'; then
             bump="minor"
           else
             bump="patch"
@@ -60,6 +61,16 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Configure remote for tag push trigger token
+        env:
+          TAG_PUSH_TOKEN: ${{ secrets.TAG_PUSH_TOKEN }}
+        run: |
+          if [ -z "${TAG_PUSH_TOKEN:-}" ]; then
+            echo "Repository secret TAG_PUSH_TOKEN must be set to a PAT or GitHub App token with repo contents:write."
+            exit 1
+          fi
+          git remote set-url origin "https://x-access-token:${TAG_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
       - name: Create and push package tags
         env:
