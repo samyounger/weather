@@ -75,6 +75,26 @@ describe('QueryPreparation', () => {
         expect(subject).toEqual(false);
       });
     });
+
+    describe('when lambda timeout guard is configured', () => {
+      it('passes stopWhen callback to waitForQuery', async () => {
+        mockQueryExecutionId.mockReturnValue({ QueryExecutionId: '12345' });
+        mockQueryExecutionState.mockReturnValue(QueryExecutionState.SUCCEEDED);
+        const database = mockDatabaseService() as unknown as { waitForQuery: jest.Mock };
+        const serviceWithTimeoutGuard = new QueryPreparation(database as unknown as Database, mockQueryParams, {
+          getRemainingTimeInMillis: () => 4000,
+          timeoutSafetyBufferMs: 5000,
+        });
+
+        await serviceWithTimeoutGuard.valid();
+
+        expect(database.waitForQuery).toHaveBeenCalledWith(
+          '12345',
+          expect.objectContaining({ stopWhen: expect.any(Function) }),
+        );
+        expect(database.waitForQuery.mock.calls[0][1].stopWhen()).toBe(true);
+      });
+    });
   });
 
   describe('#responseText', () => {

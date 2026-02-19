@@ -115,6 +115,33 @@ describe('handler', () => {
     }));
   });
 
+  it('returns 400 when validated query params are unavailable', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue(undefined);
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(400);
+    expect(subject.body).toEqual(JSON.stringify({ error: 'Unable to parse query parameters' }));
+  });
+
+  it('returns 400 when sync mode is missing date range params', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({ mode: 'sync' });
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(400);
+    expect(subject.body).toEqual(JSON.stringify({ error: 'Sync mode requires from and to query parameters' }));
+  });
+
+  it('returns 500 when sync result set is empty', async () => {
+    mockDatabaseGetResults.mockResolvedValueOnce({ ResultSet: { Rows: [] } });
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(500);
+    expect(subject.body).toEqual(JSON.stringify({ error: 'Failed to retrieve Athena query results' }));
+  });
+
   it('starts async query and returns 202 with queryExecutionId', async () => {
     mockQueryParamValidatorValidated.mockReturnValue({
       mode: 'async',
@@ -168,5 +195,20 @@ describe('handler', () => {
     await callHandler(syncEvent);
 
     expect(subject.statusCode).toBe(500);
+  });
+
+  it('returns 400 when async mode start does not include range params', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({ mode: 'async' });
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(400);
+    expect(subject.body).toEqual(JSON.stringify({ error: 'Async mode start requires from and to query parameters' }));
+  });
+
+  it('rethrows unexpected runtime errors', async () => {
+    mockDatabaseGetResults.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(handler(syncEvent, mockContext)).rejects.toThrow('boom');
   });
 });
