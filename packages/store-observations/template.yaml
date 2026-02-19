@@ -200,7 +200,7 @@ Resources:
     Type: AWS::CloudWatch::Alarm
     Condition: HasAlertEmail
     Properties:
-      AlarmDescription: !Sub "Lambda ${TempestLambdaFunction} duration exceeded 48s."
+      AlarmDescription: !Sub "WARNING: Lambda ${TempestLambdaFunction} duration exceeded 48s (timeout: 60s)."
       Namespace: AWS/Lambda
       MetricName: Duration
       Dimensions:
@@ -211,6 +211,25 @@ Resources:
       EvaluationPeriods: 1
       DatapointsToAlarm: 1
       Threshold: 48000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlertsTopic
+  TempestLambdaDurationCriticalAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasAlertEmail
+    Properties:
+      AlarmDescription: !Sub "CRITICAL: Lambda ${TempestLambdaFunction} duration exceeded 55s and is near timeout (timeout: 60s)."
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref TempestLambdaFunction
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 55000
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
       AlarmActions:
