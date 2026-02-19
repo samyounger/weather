@@ -52,6 +52,7 @@ runs:
         refine=false
         backfill=false
         deploy_role=false
+        shared_all=false
 
         if ! git cat-file -e "${base_sha}^{commit}" >/dev/null 2>&1 || ! git cat-file -e "${head_sha}^{commit}" >/dev/null 2>&1; then
           cloud=true
@@ -64,31 +65,37 @@ runs:
           changed_files="$(git diff --name-only "$base_sha" "$head_sha")"
           while IFS= read -r file; do
             case "$file" in
-              packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
+              package.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
+                shared_all=true
+                ;;
+            esac
+
+            case "$file" in
+              packages/cloud-computing/*)
                 cloud=true
                 ;;
             esac
 
             case "$file" in
-              packages/store-observations/*|packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
+              packages/store-observations/*)
                 store=true
                 ;;
             esac
 
             case "$file" in
-              packages/fetch-observations/*|packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
+              packages/fetch-observations/*)
                 fetch=true
                 ;;
             esac
 
             case "$file" in
-              packages/refine-observations/*|packages/cloud-computing/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
+              packages/refine-observations/*)
                 refine=true
                 ;;
             esac
 
             case "$file" in
-              packages/backfill-observations/*|package.json|package-lock.json|.node-version|eslint.config.mjs|jest.config.cjs|tsconfig*)
+              packages/backfill-observations/*)
                 backfill=true
                 ;;
             esac
@@ -116,6 +123,21 @@ runs:
               esac
             fi
           done <<< "$changed_files"
+
+          if [ "$shared_all" = "true" ]; then
+            cloud=true
+            store=true
+            fetch=true
+            refine=true
+            backfill=true
+          fi
+
+          # cloud-computing is a dependency of observations packages; cloud changes impact dependents.
+          if [ "$cloud" = "true" ]; then
+            store=true
+            fetch=true
+            refine=true
+          fi
         fi
 
         echo "cloud=$cloud" >> "$GITHUB_OUTPUT"

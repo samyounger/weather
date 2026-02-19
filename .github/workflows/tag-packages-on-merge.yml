@@ -211,7 +211,7 @@ jobs:
 
   create-deployment-role-policy:
     needs: prepare-release
-    if: needs.prepare-release.outputs.role_changed == 'true'
+    if: always() && needs.prepare-release.outputs.role_changed == 'true' && needs.prepare-release.result == 'success'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -247,7 +247,7 @@ jobs:
     needs:
       - prepare-release
       - create-deployment-role-policy
-    if: needs.prepare-release.outputs.role_changed == 'true' && needs.create-deployment-role-policy.result == 'success'
+    if: always() && needs.create-deployment-role-policy.result == 'success' && needs.prepare-release.outputs.role_changed == 'true'
     concurrency:
       group: deploy-prod-github-tempest-cfn-deploy-role
       cancel-in-progress: false
@@ -306,7 +306,7 @@ jobs:
       - prepare-release
       - test-cloud
       - policy-gate
-    if: needs.prepare-release.outputs.cloud_changed == 'true'
+    if: always() && needs.prepare-release.outputs.cloud_changed == 'true' && needs.test-cloud.result == 'success' && needs.policy-gate.result == 'success'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -343,7 +343,7 @@ jobs:
       - test-cloud
       - policy-gate
       - create-deployment-cloud
-    if: needs.prepare-release.outputs.cloud_changed == 'true'
+    if: always() && needs.create-deployment-cloud.result == 'success'
     uses: ./.github/workflows/reusable-deploy-cloud-computing.yml
     with:
       checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
@@ -378,7 +378,7 @@ jobs:
       - prepare-release
       - test-store
       - policy-gate
-    if: needs.prepare-release.outputs.store_changed == 'true'
+    if: always() && needs.prepare-release.outputs.store_changed == 'true' && needs.test-store.result == 'success' && needs.policy-gate.result == 'success'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -417,7 +417,7 @@ jobs:
       - test-store
       - policy-gate
       - create-deployment-store
-    if: needs.prepare-release.outputs.store_changed == 'true'
+    if: always() && needs.create-deployment-store.result == 'success'
     concurrency:
       group: deploy-prod-store-observations
       cancel-in-progress: false
@@ -464,7 +464,7 @@ jobs:
       - prepare-release
       - test-fetch
       - policy-gate
-    if: needs.prepare-release.outputs.fetch_changed == 'true'
+    if: always() && needs.prepare-release.outputs.fetch_changed == 'true' && needs.test-fetch.result == 'success' && needs.policy-gate.result == 'success'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -503,7 +503,7 @@ jobs:
       - test-fetch
       - policy-gate
       - create-deployment-fetch
-    if: needs.prepare-release.outputs.fetch_changed == 'true'
+    if: always() && needs.create-deployment-fetch.result == 'success'
     concurrency:
       group: deploy-prod-fetch-observations
       cancel-in-progress: false
@@ -550,7 +550,7 @@ jobs:
       - prepare-release
       - test-refine
       - policy-gate
-    if: needs.prepare-release.outputs.refine_changed == 'true'
+    if: always() && needs.prepare-release.outputs.refine_changed == 'true' && needs.test-refine.result == 'success' && needs.policy-gate.result == 'success'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -589,7 +589,7 @@ jobs:
       - test-refine
       - policy-gate
       - create-deployment-refine
-    if: needs.prepare-release.outputs.refine_changed == 'true'
+    if: always() && needs.create-deployment-refine.result == 'success'
     concurrency:
       group: deploy-prod-refine-observations
       cancel-in-progress: false
@@ -636,7 +636,7 @@ jobs:
       - prepare-release
       - test-backfill
       - policy-gate
-    if: needs.prepare-release.outputs.backfill_changed == 'true'
+    if: always() && needs.prepare-release.outputs.backfill_changed == 'true' && needs.test-backfill.result == 'success' && needs.policy-gate.result == 'success'
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -675,7 +675,7 @@ jobs:
       - test-backfill
       - policy-gate
       - create-deployment-backfill
-    if: needs.prepare-release.outputs.backfill_changed == 'true'
+    if: always() && needs.create-deployment-backfill.result == 'success'
     concurrency:
       group: deploy-prod-backfill-observations
       cancel-in-progress: false
