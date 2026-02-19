@@ -2,19 +2,16 @@ import { Database } from "@weather/cloud-computing";
 import { QueryPreparation } from "./query-preparation";
 import { ObservationQueries } from "../queries/observation-queries";
 import { QueryExecutionState } from "@aws-sdk/client-athena";
-import { QueryStringParams } from "./query-string-param-validator";
 
 jest.spyOn(ObservationQueries, 'getObservationsByDateRange').mockReturnValue('SELECT * FROM observations');
 
-const mockQueryParams: QueryStringParams = {
-  columns: 'column1,column2',
-  year: '2020',
-  monthMin: '01',
-  monthMax: '01',
-  dayMin: '01',
-  dayMax: '01',
-  hourMin: '00',
-  hourMax: '23',
+const mockQueryParams = {
+  fields: ['datetime', 'winddirection'],
+  from: new Date('2026-02-19T00:00:00Z'),
+  to: new Date('2026-02-19T01:00:00Z'),
+  fromEpochSeconds: 1771459200,
+  toEpochSeconds: 1771462800,
+  limit: 100,
 };
 
 const mockQueryExecutionState = jest.fn().mockReturnValue(QueryExecutionState.SUCCEEDED);
@@ -78,6 +75,26 @@ describe('QueryPreparation', () => {
         expect(subject).toEqual(false);
       });
     });
+
+    describe('when lambda timeout guard is configured', () => {
+      it('passes stopWhen callback to waitForQuery', async () => {
+        mockQueryExecutionId.mockReturnValue({ QueryExecutionId: '12345' });
+        mockQueryExecutionState.mockReturnValue(QueryExecutionState.SUCCEEDED);
+        const database = mockDatabaseService() as unknown as { waitForQuery: jest.Mock };
+        const serviceWithTimeoutGuard = new QueryPreparation(database as unknown as Database, mockQueryParams, {
+          getRemainingTimeInMillis: () => 4000,
+          timeoutSafetyBufferMs: 5000,
+        });
+
+        await serviceWithTimeoutGuard.valid();
+
+        expect(database.waitForQuery).toHaveBeenCalledWith(
+          '12345',
+          expect.objectContaining({ stopWhen: expect.any(Function) }),
+        );
+        expect(database.waitForQuery.mock.calls[0][1].stopWhen()).toBe(true);
+      });
+    });
   });
 
   describe('#responseText', () => {
@@ -113,6 +130,17 @@ describe('QueryPreparation', () => {
 
         it('should return false', () => {
           expect(subject).toEqual('Failed to process Athena query');
+        });
+      });
+
+      describe('when the query times out and is cancelled', () => {
+        beforeEach(async () => {
+          mockQueryExecutionState.mockReturnValue(QueryExecutionState.CANCELLED);
+          await setupService();
+        });
+
+        it('should return timeout message', () => {
+          expect(subject).toEqual('Athena query timed out and was cancelled');
         });
       });
     });

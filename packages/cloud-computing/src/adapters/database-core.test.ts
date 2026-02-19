@@ -90,6 +90,58 @@ describe('Database core methods', () => {
 
       await expect(subject).resolves.toEqual(QueryExecutionState.RUNNING);
     });
+
+    it('should cancel query when stopWhen returns true', async () => {
+      const database = new Database();
+      const cancelSpy = jest.spyOn(database, 'cancelQuery').mockResolvedValue();
+
+      await expect(database.waitForQuery('query-123', { stopWhen: () => true })).resolves.toEqual(QueryExecutionState.CANCELLED);
+      expect(cancelSpy).toHaveBeenCalledWith('query-123');
+    });
+
+    it('should cancel query when max wait is reached', async () => {
+      const database = new Database();
+      const cancelSpy = jest.spyOn(database, 'cancelQuery').mockResolvedValue();
+      jest.spyOn(database as unknown as { queryStatus: () => Promise<QueryExecutionState> }, 'queryStatus')
+        .mockResolvedValue(QueryExecutionState.RUNNING);
+      const nowSpy = jest.spyOn(Date, 'now')
+        .mockReturnValueOnce(1000)
+        .mockReturnValueOnce(1002);
+
+      const subject = database.waitForQuery('query-123', { maxWaitMs: 1 });
+      await jest.advanceTimersByTimeAsync(2000);
+
+      await expect(subject).resolves.toEqual(QueryExecutionState.CANCELLED);
+      expect(cancelSpy).toHaveBeenCalledWith('query-123');
+      nowSpy.mockRestore();
+    });
+  });
+
+  describe('cancelQuery', () => {
+    it('should swallow stop query errors', async () => {
+      send.mockRejectedValue(new Error('stop failed'));
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const database = new Database();
+
+      await expect(database.cancelQuery('query-123')).resolves.toBeUndefined();
+      expect(errorSpy).toHaveBeenCalledWith('Failed to cancel Athena query', expect.objectContaining({ queryExecutionId: 'query-123' }));
+      errorSpy.mockRestore();
+    });
+  });
+
+  describe('getQueryState', () => {
+    it('should return current query state', async () => {
+      send.mockResolvedValue({
+        QueryExecution: {
+          Status: {
+            State: QueryExecutionState.RUNNING,
+          },
+        },
+      });
+      const database = new Database();
+
+      await expect(database.getQueryState('query-123')).resolves.toEqual(QueryExecutionState.RUNNING);
+    });
   });
 
   describe('queryStatus', () => {

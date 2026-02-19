@@ -86,5 +86,17 @@ describe('ObservationsFactory', () => {
         expect(ObservationsFactory.build(mockDataWithNoData)).toEqual([undefined]);
       });
     });
+
+    describe('when result set is missing', () => {
+      it('should return undefined', () => {
+        expect(ObservationsFactory.build({})).toBeUndefined();
+      });
+    });
+
+    describe('when rows are missing', () => {
+      it('should return undefined', () => {
+        expect(ObservationsFactory.build({ ResultSet: {} })).toBeUndefined();
+      });
+    });
   });
 });

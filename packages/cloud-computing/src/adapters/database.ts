@@ -8,7 +8,8 @@ import {
   QueryExecutionState,
   StartQueryExecutionCommand,
   StartQueryExecutionInput,
-  StartQueryExecutionOutput
+  StartQueryExecutionOutput,
+  StopQueryExecutionCommand,
 } from "@aws-sdk/client-athena";
 import { databaseClient } from "./client";
 import { BucketLocationConstraint } from "@aws-sdk/client-s3";
@@ -16,6 +17,16 @@ import { BucketLocationConstraint } from "@aws-sdk/client-s3";
 const REGION: BucketLocationConstraint = 'eu-west-2';
 const OUTPUT_LOCATION = 's3://weather-tempest-records/queries/';
 const DATABASE = 'tempest_weather';
+const WORKGROUP = process.env.ATHENA_WORKGROUP ?? 'primary';
+const DEFAULT_POLL_INTERVAL_MS = 2000;
+const DEFAULT_MAX_POLLS = 120;
+
+export type WaitForQueryOptions = {
+  maxPolls?: number;
+  pollIntervalMs?: number;
+  maxWaitMs?: number;
+  stopWhen?: () => boolean;
+};
 
 type ObservationsPartition = {
   year: string;
@@ -48,7 +59,7 @@ export class Database {
           S3AclOption: "BUCKET_OWNER_FULL_CONTROL",
         },
       },
-      WorkGroup: "primary",
+      WorkGroup: WORKGROUP,
       ResultReuseConfiguration: {
         ResultReuseByAgeConfiguration: {
           Enabled: false,
@@ -59,26 +70,58 @@ export class Database {
     return await client.send(command);
   }
 
-  public async waitForQuery(queryExecutionId: string): Promise<QueryExecutionState | undefined> {
-    const queryLoop = async (queryCount = 0): Promise<QueryExecutionState | undefined> => {
+  public async waitForQuery(
+    queryExecutionId: string,
+    {
+      maxPolls = DEFAULT_MAX_POLLS,
+      pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
+      maxWaitMs,
+      stopWhen,
+    }: WaitForQueryOptions = {},
+  ): Promise<QueryExecutionState | undefined> {
+    const startedAt = Date.now();
+
+    for (let queryCount = 0; queryCount <= maxPolls; queryCount += 1) {
+      if (stopWhen?.()) {
+        await this.cancelQuery(queryExecutionId);
+        return QueryExecutionState.CANCELLED;
+      }
+
+      if (maxWaitMs && (Date.now() - startedAt) >= maxWaitMs) {
+        await this.cancelQuery(queryExecutionId);
+        return QueryExecutionState.CANCELLED;
+      }
+
       const queryStatus = await this.queryStatus(queryExecutionId);
       if (
         queryStatus === QueryExecutionState.SUCCEEDED ||
         queryStatus === QueryExecutionState.FAILED ||
         queryStatus === QueryExecutionState.CANCELLED ||
-        queryCount >= 120
+        queryCount >= maxPolls
       ) {
         return queryStatus;
       }
 
-      return await new Promise((resolve) => {
-        setTimeout(() => {
-          resolve(queryLoop(queryCount += 1));
-        }, 2000);
-      });
-    };
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
 
-    return await queryLoop();
+    return QueryExecutionState.CANCELLED;
+  }
+
+  public async cancelQuery(queryExecutionId: string): Promise<void> {
+    const client = await this.client;
+    try {
+      await client.send(new StopQueryExecutionCommand({ QueryExecutionId: queryExecutionId }));
+    } catch (error) {
+      console.error('Failed to cancel Athena query', {
+        queryExecutionId,
+        error,
+      });
+    }
+  }
+
+  public async getQueryState(queryExecutionId: string): Promise<QueryExecutionState | undefined> {
+    return await this.queryStatus(queryExecutionId);
   }
 
   private async queryStatus(queryExecutionId: string): Promise<QueryExecutionState | undefined> {
@@ -99,10 +142,11 @@ export class Database {
     return response.QueryExecution.Status.State;
   }
 
-  public async getResults(queryExecutionId: string): Promise<GetQueryResultsOutput> {
+  public async getResults(queryExecutionId: string, nextToken?: string): Promise<GetQueryResultsOutput> {
     const client = await this.client;
     const input: GetQueryResultsInput = {
       QueryExecutionId: queryExecutionId,
+      NextToken: nextToken,
     };
     const command = new GetQueryResultsCommand(input);
     return await client.send(command);
