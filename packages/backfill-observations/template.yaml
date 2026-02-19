@@ -271,13 +271,28 @@ Resources:
             Choices:
               - Variable: $.maxConcurrency
                 IsPresent: true
-                Next: DetermineChunkSource
+                Next: DetermineBackfillType
             Default: SetDefaultMaxConcurrency
           SetDefaultMaxConcurrency:
             Type: Pass
             Result: 3
             ResultPath: $.maxConcurrency
-            Next: DetermineChunkSource
+            Next: DetermineBackfillType
+          DetermineBackfillType:
+            Type: Choice
+            Choices:
+              - Variable: $.rawTable
+                IsPresent: true
+                Next: DelegateToRefinedBackfill
+            Default: DetermineChunkSource
+          DelegateToRefinedBackfill:
+            Type: Task
+            Resource: arn:aws:states:::states:startExecution.sync:2
+            OutputPath: $.Output
+            Parameters:
+              StateMachineArn: !Ref RefinedBackfillStateMachine
+              Input.$: $
+            End: true
           DetermineChunkSource:
             Type: Choice
             Choices:
@@ -370,6 +385,16 @@ Resources:
           Done:
             Type: Succeed
       Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - states:StartExecution
+              Resource: !Ref RefinedBackfillStateMachine
+            - Effect: Allow
+              Action:
+                - states:DescribeExecution
+                - states:StopExecution
+              Resource: !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:*
         - LambdaInvokePolicy:
             FunctionName: !Ref BackfillPlannerFunction
         - LambdaInvokePolicy:
