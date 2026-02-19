@@ -17,6 +17,13 @@ const REGION: BucketLocationConstraint = 'eu-west-2';
 const OUTPUT_LOCATION = 's3://weather-tempest-records/queries/';
 const DATABASE = 'tempest_weather';
 
+type ObservationsPartition = {
+  year: string;
+  month: string;
+  day: string;
+  hour: string;
+};
+
 export class Database {
   private readonly client: Promise<AthenaClient>;
 
@@ -110,8 +117,22 @@ export class Database {
    * @returns Promise<boolean>
    */
   public async addObservationsPartition(year: string, month: string, day: string, hour: string): Promise<boolean> {
-    const partitionLocation = `s3://weather-tempest-records/year=${year}/month=${month}/day=${day}/hour=${hour}/`;
-    const query = `ALTER TABLE observations ADD IF NOT EXISTS PARTITION (year='${year}', month='${month}', day='${day}', hour='${hour}') LOCATION '${partitionLocation}';`;
+    return await this.addObservationsPartitions([{ year, month, day, hour }]);
+  }
+
+  public async addObservationsPartitions(partitions: ObservationsPartition[]): Promise<boolean> {
+    if (!partitions.length) {
+      return true;
+    }
+
+    const partitionStatements = partitions.map(({ year, month, day, hour }) => {
+      const location = `s3://weather-tempest-records/year=${year}/month=${month}/day=${day}/hour=${hour}/`;
+
+      return `PARTITION (year='${year}', month='${month}', day='${day}', hour='${hour}') LOCATION '${location}'`;
+    }).join('\n');
+
+    const query = `ALTER TABLE observations ADD IF NOT EXISTS\n${partitionStatements};`;
+
     try {
       const result = await this.query(query);
       const queryId = result.QueryExecutionId;
@@ -122,11 +143,8 @@ export class Database {
       const state = await this.waitForQuery(queryId);
       return state === QueryExecutionState.SUCCEEDED;
     } catch (error) {
-      console.error('Failed to add observations partition', {
-        year,
-        month,
-        day,
-        hour,
+      console.error('Failed to add observations partitions', {
+        partitions,
         error,
       });
       return false;

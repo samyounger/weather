@@ -18,4 +18,19 @@ export class Database {
       resolve(JSON.parse('{"ResultSet": {"Rows": [{"Data": [{"VarCharValue": "2020-01-01T00:00:00Z"}]}]}}'));
     }, 100);
   }));
+
+  public addObservationsPartitions = jest.fn().mockReturnValue(new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(true);
+    }, 100);
+  }));
+
+  public addObservationsPartition = jest.fn().mockImplementation(async (
+    year: string,
+    month: string,
+    day: string,
+    hour: string,
+  ) => {
+    return await this.addObservationsPartitions([{ year, month, day, hour }]);
+  });
 }

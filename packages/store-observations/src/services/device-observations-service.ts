@@ -45,30 +45,25 @@ export class DeviceObservationsService {
       partitionSet.add(partitionDateKeyUtc(new Date(obs.dateTime * 1000)));
     }
 
-    let succeeded = 0;
-    let failed = 0;
-    for (const key of partitionSet) {
+    const partitions = Array.from(partitionSet).map((key) => {
       const [year, month, day, hour] = key.split('-');
-      try {
-        const result = await this.database.addObservationsPartition(year, month, day, hour);
-        if (result) {
-          succeeded += 1;
-        } else {
-          console.error('Athena partition update returned unsuccessful result', { year, month, day, hour });
-          failed += 1;
-        }
-      } catch (error) {
-        console.error('Athena partition update threw error', {
-          year,
-          month,
-          day,
-          hour,
-          error,
-        });
-        failed += 1;
-      }
-    }
 
-    return { succeeded, failed };
+      return { year, month, day, hour };
+    });
+
+    try {
+      const result = await this.database.addObservationsPartitions(partitions);
+      if (result) {
+        return { succeeded: partitions.length, failed: 0 };
+      }
+
+      return { succeeded: 0, failed: partitions.length };
+    } catch (error) {
+      console.error('Athena partition update threw error', {
+        partitions,
+        error,
+      });
+      return { succeeded: 0, failed: partitions.length };
+    }
   }
 }

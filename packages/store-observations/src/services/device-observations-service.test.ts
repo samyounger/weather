@@ -14,9 +14,9 @@ jest.mock('@weather/cloud-computing');
 describe('DeviceObservationsService', () => {
   const debugSpy = jest.spyOn(console, 'debug').mockImplementation(() => {});
   const observationsService = new ObservationsService(new Storage(), new DeviceObservationFactory());
-  const addObservationsPartitionMock: jest.MockedFunction<Database['addObservationsPartition']> = jest.fn().mockResolvedValue(true);
-  const database: Pick<Database, 'addObservationsPartition'> = {
-    addObservationsPartition: addObservationsPartitionMock,
+  const addObservationsPartitionsMock = jest.fn().mockResolvedValue(true);
+  const database = {
+    addObservationsPartitions: addObservationsPartitionsMock,
   };
   const service = new DeviceObservationsService(observationsService, database as unknown as Database);
 
@@ -31,8 +31,8 @@ describe('DeviceObservationsService', () => {
     };
 
     beforeEach(async () => {
-      addObservationsPartitionMock.mockReset();
-      addObservationsPartitionMock.mockResolvedValue(true);
+      addObservationsPartitionsMock.mockReset();
+      addObservationsPartitionsMock.mockResolvedValue(true);
       debugSpy.mockClear();
       const reading = service.fetchAndInsertReading();
       jest.advanceTimersByTime(RESPONSE_DURATION);
@@ -88,9 +88,11 @@ describe('DeviceObservationsService', () => {
     });
 
     it('should add an athena partition for each hour with observations', () => {
-      expect(database.addObservationsPartition).toHaveBeenNthCalledWith(1, '2024', '08', '05', '22');
-      expect(database.addObservationsPartition).toHaveBeenNthCalledWith(2, '2040', '06', '09', '23');
-      expect(database.addObservationsPartition).toHaveBeenCalledTimes(2);
+      expect(database.addObservationsPartitions).toHaveBeenCalledTimes(1);
+      expect(database.addObservationsPartitions).toHaveBeenCalledWith([
+        { year: '2024', month: '08', day: '05', hour: '22' },
+        { year: '2040', month: '06', day: '09', hour: '23' },
+      ]);
       expect(subject.partitionStatus).toEqual({ succeeded: 2, failed: 0 });
       expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 2, failed: 0 });
     });
@@ -104,40 +106,38 @@ describe('DeviceObservationsService', () => {
         ],
       });
       (observationsService.readObservation as jest.Mock).mockResolvedValueOnce(reading);
-      addObservationsPartitionMock.mockClear();
+      addObservationsPartitionsMock.mockClear();
 
       const readingPromise = service.fetchAndInsertReading();
       jest.advanceTimersByTime(RESPONSE_DURATION);
       await readingPromise;
 
-      expect(database.addObservationsPartition).toHaveBeenCalledTimes(1);
-      expect(database.addObservationsPartition).toHaveBeenCalledWith('2024', '08', '05', '22');
+      expect(database.addObservationsPartitions).toHaveBeenCalledTimes(1);
+      expect(database.addObservationsPartitions).toHaveBeenCalledWith([
+        { year: '2024', month: '08', day: '05', hour: '22' },
+      ]);
     });
 
-    it('should log succeeded and failed partition counts', async () => {
-      addObservationsPartitionMock
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false);
+    it('should log failed partition counts when batch update is unsuccessful', async () => {
+      addObservationsPartitionsMock.mockResolvedValueOnce(false);
       debugSpy.mockClear();
 
       const readingPromise = service.fetchAndInsertReading();
       jest.advanceTimersByTime(RESPONSE_DURATION);
       await readingPromise;
 
-      expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 1, failed: 1 });
+      expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 0, failed: 2 });
     });
 
-    it('should count failed partitions when add partition throws', async () => {
-      addObservationsPartitionMock
-        .mockResolvedValueOnce(true)
-        .mockRejectedValueOnce(new Error('athena unavailable'));
+    it('should count failed partitions when batch update throws', async () => {
+      addObservationsPartitionsMock.mockRejectedValueOnce(new Error('athena unavailable'));
       debugSpy.mockClear();
 
       const readingPromise = service.fetchAndInsertReading();
       jest.advanceTimersByTime(RESPONSE_DURATION);
       await expect(readingPromise).resolves.toBeDefined();
 
-      expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 1, failed: 1 });
+      expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 0, failed: 2 });
     });
   });
 });

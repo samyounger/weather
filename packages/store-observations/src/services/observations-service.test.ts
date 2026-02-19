@@ -3,7 +3,6 @@ import { request } from "../utils/request";
 import { Device, Observation } from "../models";
 import { DeviceObservationFactory } from "../factories/device-observation-factory";
 import { Storage } from '@weather/cloud-computing';
-import { PutObjectCommandOutput } from "@aws-sdk/client-s3";
 
 jest.mock('../utils/request');
 jest.mock('@weather/cloud-computing');
@@ -48,34 +47,14 @@ describe('ObservationsService', () => {
       jest.clearAllMocks();
     });
 
-    it('should verify the directory exists', async () => {
-      await service().insertReading(mockObservation, 'test-obj');
-      expect(storageService.directoryExists).toHaveBeenCalledWith('weather-tempest-records');
-    });
+    it('should create the object', async () => {
+      await service().insertReading(mockObservation, mockFileName);
 
-    describe('when the directory exists', () => {
-      beforeEach(async () => {
-        storageService.directoryExists = jest.fn().mockResolvedValue(true);
-        await service().insertReading(mockObservation, mockFileName);
-      });
-
-      it('should create the object', () => {
-        expect(storageService.createObject).toHaveBeenCalledWith('weather-tempest-records', `year=1066/month=01/day=02/hour=23/${mockFileName}`, "{\"foo\":\"bar\"}");
-      });
-    });
-
-    describe('when the directory does not exist', () => {
-      let subject: () => Promise<PutObjectCommandOutput>;
-
-      beforeEach(async () => {
-        storageService.directoryExists = jest.fn().mockResolvedValue(false);
-        subject = async () => await service().insertReading(mockObservation, mockFileName);
-      });
-
-      it('should return false', async () => {
-        await expect(subject()).rejects.toThrow(Error);
-        await expect(subject()).rejects.toThrow('Directory does not exist. Create it first.');
-      });
+      expect(storageService.createObject).toHaveBeenCalledWith(
+        'weather-tempest-records',
+        `year=1066/month=01/day=02/hour=23/${mockFileName}`,
+        "{\"foo\":\"bar\"}",
+      );
     });
   });
 });
