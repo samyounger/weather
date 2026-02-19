@@ -50,21 +50,15 @@ jobs:
 
           case "$TARGET_PACKAGE" in
             store-observations)
-              run_workspace_build "@weather/cloud-computing"
               run_workspace_build "@weather/store-observations"
-              run_workspace_tests "@weather/cloud-computing"
               run_workspace_tests "@weather/store-observations"
               ;;
             fetch-observations)
-              run_workspace_build "@weather/cloud-computing"
               run_workspace_build "@weather/fetch-observations"
-              run_workspace_tests "@weather/cloud-computing"
               run_workspace_tests "@weather/fetch-observations"
               ;;
             refine-observations)
-              run_workspace_build "@weather/cloud-computing"
               run_workspace_build "@weather/refine-observations"
-              run_workspace_tests "@weather/cloud-computing"
               run_workspace_tests "@weather/refine-observations"
               ;;
             backfill-observations)
