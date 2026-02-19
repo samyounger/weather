@@ -9,11 +9,14 @@ const queryStringParams: QueryStringParams = {
 
 describe('QueryStringParamValidator', () => {
   describe('#valid', () => {
-    it('returns true for a valid query', () => {
+    it('returns true for a valid sync query', () => {
       const service = new QueryStringParamValidator(queryStringParams);
 
       expect(service.valid()).toBe(true);
       expect(service.validated()).toEqual({
+        mode: 'sync',
+        queryExecutionId: undefined,
+        nextToken: undefined,
         from: new Date('2026-02-19T00:00:00Z'),
         to: new Date('2026-02-19T01:00:00Z'),
         fromEpochSeconds: 1771459200,
@@ -21,6 +24,24 @@ describe('QueryStringParamValidator', () => {
         fields: ['winddirection', 'airtemperature'],
         limit: 50,
       });
+    });
+
+    it('returns true for async poll requests with queryExecutionId only', () => {
+      const service = new QueryStringParamValidator({ mode: 'async', queryExecutionId: 'query-123', nextToken: 'abc' });
+
+      expect(service.valid()).toBe(true);
+      expect(service.validated()).toEqual({
+        mode: 'async',
+        queryExecutionId: 'query-123',
+        nextToken: 'abc',
+      });
+    });
+
+    it('returns false when mode is invalid', () => {
+      const service = new QueryStringParamValidator({ mode: 'batch' });
+
+      expect(service.valid()).toBe(false);
+      expect(service.returnError()).toBe('mode must be sync or async');
     });
 
     it('returns false when required query parameters are missing', () => {
@@ -70,6 +91,7 @@ describe('QueryStringParamValidator', () => {
 
       expect(service.valid()).toBe(true);
       expect(service.validated()).toMatchObject({
+        mode: 'sync',
         limit: 100,
         fields: ['datetime', 'winddirection', 'windavg', 'windgust', 'airtemperature', 'relativehumidity', 'rainaccumulation'],
       });
@@ -81,7 +103,7 @@ describe('QueryStringParamValidator', () => {
       const service = new QueryStringParamValidator(null);
 
       expect(service.valid()).toBe(false);
-      expect(service.returnError()).toBe('Missing required query parameters: from, to');
+      expect(service.returnError()).toBe('Missing required query parameters');
     });
   });
 });

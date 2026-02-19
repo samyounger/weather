@@ -2,11 +2,10 @@ import { Database } from "@weather/cloud-computing";
 import { QueryPreparation } from "./query-preparation";
 import { ObservationQueries } from "../queries/observation-queries";
 import { QueryExecutionState } from "@aws-sdk/client-athena";
-import { ValidatedQueryStringParams } from "./query-string-param-validator";
 
 jest.spyOn(ObservationQueries, 'getObservationsByDateRange').mockReturnValue('SELECT * FROM observations');
 
-const mockQueryParams: ValidatedQueryStringParams = {
+const mockQueryParams = {
   fields: ['datetime', 'winddirection'],
   from: new Date('2026-02-19T00:00:00Z'),
   to: new Date('2026-02-19T01:00:00Z'),

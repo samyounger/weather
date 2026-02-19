@@ -1,20 +1,25 @@
 import { APIGatewayProxyEventQueryStringParameters } from "aws-lambda/trigger/api-gateway-proxy";
 
 export interface QueryStringParams extends APIGatewayProxyEventQueryStringParameters {
-  from: string;
-  to: string;
+  from?: string;
+  to?: string;
   fields?: string;
   limit?: string;
   nextToken?: string;
+  mode?: string;
+  queryExecutionId?: string;
 }
 
 export interface ValidatedQueryStringParams {
-  from: Date;
-  to: Date;
-  fromEpochSeconds: number;
-  toEpochSeconds: number;
-  fields: string[];
-  limit: number;
+  mode: 'sync' | 'async';
+  queryExecutionId?: string;
+  nextToken?: string;
+  from?: Date;
+  to?: Date;
+  fromEpochSeconds?: number;
+  toEpochSeconds?: number;
+  fields?: string[];
+  limit?: number;
 }
 
 const DEFAULT_FIELDS = ['datetime', 'winddirection', 'windavg', 'windgust', 'airtemperature', 'relativehumidity', 'rainaccumulation'];
@@ -86,7 +91,29 @@ export class QueryStringParamValidator {
     this.errorText = '';
     this.validatedParams = undefined;
 
-    const missingParams = this.missingParams();
+    if (!this.queryParamsExist()) {
+      this.errorText = 'Missing required query parameters';
+      return false;
+    }
+
+    const mode = this.parseMode();
+    if (!mode) {
+      return false;
+    }
+
+    const queryExecutionId = this.queryStringParams?.queryExecutionId;
+
+    if (mode === 'async' && queryExecutionId) {
+      this.validatedParams = {
+        mode,
+        queryExecutionId,
+        nextToken: this.queryStringParams?.nextToken,
+      };
+
+      return true;
+    }
+
+    const missingParams = this.missingDateRangeParams();
     if (missingParams.length > 0) {
       this.errorText = `Missing required query parameters: ${missingParams.join(', ')}`;
       return false;
@@ -126,6 +153,9 @@ export class QueryStringParamValidator {
     }
 
     this.validatedParams = {
+      mode,
+      queryExecutionId,
+      nextToken: this.queryStringParams?.nextToken,
       from,
       to,
       fromEpochSeconds: Math.floor(from.getTime() / 1000),
@@ -153,11 +183,17 @@ export class QueryStringParamValidator {
     return !!this.queryStringParams;
   }
 
-  private missingParams(): string[] {
-    if (!this.queryParamsExist()) {
-      return ['from', 'to'];
+  private parseMode(): 'sync' | 'async' | undefined {
+    const mode = (this.queryStringParams?.mode ?? 'sync').toLowerCase();
+    if (mode !== 'sync' && mode !== 'async') {
+      this.errorText = 'mode must be sync or async';
+      return undefined;
     }
 
+    return mode;
+  }
+
+  private missingDateRangeParams(): string[] {
     return ['from', 'to']
       .filter((param) => this.queryStringParams && this.queryStringParams[param] === undefined);
   }

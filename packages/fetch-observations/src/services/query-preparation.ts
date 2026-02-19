@@ -12,6 +12,11 @@ type QueryPreparationOptions = {
   getRemainingTimeInMillis?: () => number;
 };
 
+type SyncValidatedQueryStringParams = Required<Pick<
+  ValidatedQueryStringParams,
+  'from' | 'to' | 'fromEpochSeconds' | 'toEpochSeconds' | 'fields' | 'limit'
+>>;
+
 export class QueryPreparation {
   public queryResponse: StartQueryExecutionOutput = {};
 
@@ -19,7 +24,7 @@ export class QueryPreparation {
 
   public constructor(
     private databaseService: Database,
-    private parameters: ValidatedQueryStringParams,
+    private parameters: SyncValidatedQueryStringParams,
     private options: QueryPreparationOptions = {},
   ) {}
 

@@ -1,5 +1,10 @@
 import { ValidatedQueryStringParams } from "../services/query-string-param-validator";
 
+type SyncValidatedQueryStringParams = Required<Pick<
+  ValidatedQueryStringParams,
+  'from' | 'to' | 'fromEpochSeconds' | 'toEpochSeconds' | 'fields' | 'limit'
+>>;
+
 export class ObservationQueries {
   private static TABLE_NAME = 'observations';
 
@@ -10,7 +15,7 @@ export class ObservationQueries {
     fromEpochSeconds,
     toEpochSeconds,
     limit,
-  }: ValidatedQueryStringParams): string {
+  }: SyncValidatedQueryStringParams): string {
     return `
       SELECT ${fields.join(',')} FROM ${this.TABLE_NAME}
       WHERE datetime >= ${fromEpochSeconds}

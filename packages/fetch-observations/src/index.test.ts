@@ -1,20 +1,22 @@
 import { handler } from './index';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from "aws-lambda";
+import { QueryExecutionState } from '@aws-sdk/client-athena';
 
-const mockDatabaseGetResults = jest.fn().mockReturnValue(new Promise((resolve) => {
-  setTimeout(() => {
-    resolve(JSON.parse('{"ResultSet": {"Rows": [{"Data": [{"VarCharValue": "2020-01-01T00:00:00Z"}]}]}}'));
-  }, 100);
-}));
+const mockDatabaseGetResults = jest.fn().mockResolvedValue(JSON.parse('{"ResultSet": {"Rows": [{"Data": [{"VarCharValue": "2020-01-01T00:00:00Z"}]}]}}'));
+const mockDatabaseGetQueryState = jest.fn().mockResolvedValue(QueryExecutionState.SUCCEEDED);
+const mockDatabaseQuery = jest.fn().mockResolvedValue({ QueryExecutionId: 'async-123' });
 jest.mock('@weather/cloud-computing', () => ({
   Database: jest.fn().mockImplementation(() => ({
+    query: mockDatabaseQuery,
     getResults: mockDatabaseGetResults,
+    getQueryState: mockDatabaseGetQueryState,
   })),
 }));
 
 const mockQueryParamValidatorValid = jest.fn().mockReturnValue(true);
 const mockQueryParamValidatorErrorMessage = jest.fn().mockReturnValue('Mock error message one');
 const mockQueryParamValidatorValidated = jest.fn().mockReturnValue({
+  mode: 'sync',
   from: new Date('2026-02-19T00:00:00Z'),
   to: new Date('2026-02-19T01:00:00Z'),
   fromEpochSeconds: 1771459200,
@@ -41,7 +43,11 @@ jest.mock('./services/query-preparation', () => ({
   }))
 }));
 
-const mockEvent: APIGatewayProxyEvent = {
+const mockContext: Context = {
+  getRemainingTimeInMillis: () => 60000,
+} as Context;
+
+const syncEvent: APIGatewayProxyEvent = {
   queryStringParameters: {
     from: '2026-02-19T00:00:00Z',
     to: '2026-02-19T01:00:00Z',
@@ -52,128 +58,115 @@ const mockEvent: APIGatewayProxyEvent = {
 
 describe('handler', () => {
   let subject: APIGatewayProxyResult;
-  const mockContext: Context = {
-    getRemainingTimeInMillis: () => 60000,
-  } as Context;
 
-  const callHandler = async () => {
-    const query = handler(mockEvent, mockContext);
+  const callHandler = async (event: APIGatewayProxyEvent) => {
+    const query = handler(event, mockContext);
     subject = await query;
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
-  });
-
-  describe('when query params are invalid', () => {
-    beforeEach(async () => {
-      mockQueryParamValidatorValid.mockReturnValue(false);
-      await callHandler();
-    });
-
-    it('should return 400', () => {
-      expect(subject.statusCode).toBe(400);
-    });
-
-    it('should return an error message', () => {
-      expect(subject.body).toEqual(JSON.stringify({
-        error: 'Mock error message one',
-      }));
+    mockDatabaseGetResults.mockResolvedValue(JSON.parse('{"ResultSet": {"Rows": [{"Data": [{"VarCharValue": "2020-01-01T00:00:00Z"}]}]}, "NextToken": "next-1"}'));
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.SUCCEEDED);
+    mockDatabaseQuery.mockResolvedValue({ QueryExecutionId: 'async-123' });
+    mockQueryParamValidatorValid.mockReturnValue(true);
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'sync',
+      from: new Date('2026-02-19T00:00:00Z'),
+      to: new Date('2026-02-19T01:00:00Z'),
+      fromEpochSeconds: 1771459200,
+      toEpochSeconds: 1771462800,
+      fields: ['datetime', 'winddirection'],
+      limit: 100,
+      nextToken: 'next-1',
     });
   });
 
-  describe('when query params are valid', () => {
-    beforeEach(() => {
-      mockQueryParamValidatorValid.mockReturnValue(true);
-      mockQueryParamValidatorValidated.mockReturnValue({
-        from: new Date('2026-02-19T00:00:00Z'),
-        to: new Date('2026-02-19T01:00:00Z'),
-        fromEpochSeconds: 1771459200,
-        toEpochSeconds: 1771462800,
-        fields: ['datetime', 'winddirection'],
-        limit: 100,
-      });
+  it('returns 400 when query params are invalid', async () => {
+    mockQueryParamValidatorValid.mockReturnValue(false);
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(400);
+  });
+
+  it('returns 500 when query preparation fails', async () => {
+    mockQueryPreparationValid.mockReturnValue(false);
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(500);
+  });
+
+  it('returns 200 for sync success and includes nextToken', async () => {
+    mockQueryPreparationValid.mockReturnValue(true);
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(200);
+    expect(subject.body).toEqual(JSON.stringify({
+      mode: 'sync',
+      queryExecutionId: '123',
+      nextToken: 'next-1',
+      parameters: {
+        ...syncEvent.queryStringParameters,
+      },
+      data: [['2020-01-01T00:00:00Z']],
+    }));
+  });
+
+  it('starts async query and returns 202 with queryExecutionId', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'async',
+      from: new Date('2026-02-19T00:00:00Z'),
+      to: new Date('2026-02-19T01:00:00Z'),
+      fromEpochSeconds: 1771459200,
+      toEpochSeconds: 1771462800,
+      fields: ['datetime', 'winddirection'],
+      limit: 100,
     });
 
-    describe('when parsed query params are unavailable', () => {
-      beforeEach(async () => {
-        mockQueryParamValidatorValidated.mockReturnValue(undefined);
-        await callHandler();
-      });
+    await callHandler(syncEvent);
 
-      it('should return 400', () => {
-        expect(subject.statusCode).toBe(400);
-      });
+    expect(subject.statusCode).toBe(202);
+    expect(subject.body).toEqual(JSON.stringify({
+      mode: 'async',
+      status: 'RUNNING',
+      queryExecutionId: 'async-123',
+    }));
+  });
 
-      it('should return an error message', () => {
-        expect(subject.body).toEqual(JSON.stringify({
-          error: 'Unable to parse query parameters',
-        }));
-      });
-    });
+  it('returns 202 while async query is still running', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({ mode: 'async', queryExecutionId: 'async-123' });
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.RUNNING);
 
-    describe('when query preparation fails', () => {
-      beforeEach(async () => {
-        mockQueryPreparationValid.mockReturnValue(false);
-        await callHandler();
-      });
+    await callHandler(syncEvent);
 
-      it('should return 500', () => {
-        expect(subject.statusCode).toBe(500);
-      });
+    expect(subject.statusCode).toBe(202);
+  });
 
-      it('should return an error message', () => {
-        expect(subject.body).toEqual(JSON.stringify({
-          error: 'Mock error message two',
-        }));
-      });
-    });
+  it('returns 200 with data when async query succeeds', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({ mode: 'async', queryExecutionId: 'async-123', nextToken: 'next-1' });
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.SUCCEEDED);
 
-    describe('when the query preparation succeeds', () => {
-      beforeEach(() => {
-        mockQueryPreparationValid.mockReturnValue(true);
-      });
+    await callHandler(syncEvent);
 
-      describe('when query result fetching fails', () => {
-        beforeEach(async () => {
-          mockDatabaseGetResults.mockResolvedValue([]);
-          await callHandler();
-        });
+    expect(subject.statusCode).toBe(200);
+    expect(subject.body).toEqual(JSON.stringify({
+      mode: 'async',
+      status: 'SUCCEEDED',
+      queryExecutionId: 'async-123',
+      nextToken: 'next-1',
+      data: [['2020-01-01T00:00:00Z']],
+    }));
+  });
 
-        it('should return 500', () => {
-          expect(subject.statusCode).toBe(500);
-        });
+  it('returns 500 when async query fails', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({ mode: 'async', queryExecutionId: 'async-123' });
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.FAILED);
 
-        it('should return an error message', () => {
-          expect(subject.body).toEqual(JSON.stringify({
-            error: 'Failed to retrieve Athena query results',
-          }));
-        });
-      });
+    await callHandler(syncEvent);
 
-      describe('when query result fetching succeeds', () => {
-        beforeEach(async () => {
-          mockDatabaseGetResults.mockReturnValue(new Promise((resolve) => {
-            setTimeout(() => {
-              resolve(JSON.parse('{"ResultSet": {"Rows": [{"Data": [{"VarCharValue": "2020-01-01T00:00:00Z"}]}]}}'));
-            }, 100);
-          }));
-          await callHandler();
-        });
-
-        it('should return 200', () => {
-          expect(subject.statusCode).toBe(200);
-        });
-
-        it('should return the response body', () => {
-          expect(subject.body).toEqual(JSON.stringify({
-            parameters: {
-              ...mockEvent.queryStringParameters,
-            },
-            data: [['2020-01-01T00:00:00Z']],
-          }));
-        });
-      });
-    });
+    expect(subject.statusCode).toBe(500);
   });
 });

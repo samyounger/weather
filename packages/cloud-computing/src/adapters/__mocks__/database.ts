@@ -19,6 +19,12 @@ export class Database {
     }, 100);
   }));
 
+  public getQueryState = jest.fn().mockReturnValue(new Promise((resolve) => {
+    setTimeout(() => {
+      resolve(QueryExecutionState.SUCCEEDED);
+    }, 100);
+  }));
+
   public addObservationsPartitions = jest.fn().mockReturnValue(new Promise((resolve) => {
     setTimeout(() => {
       resolve(true);

@@ -120,6 +120,10 @@ export class Database {
     }
   }
 
+  public async getQueryState(queryExecutionId: string): Promise<QueryExecutionState | undefined> {
+    return await this.queryStatus(queryExecutionId);
+  }
+
   private async queryStatus(queryExecutionId: string): Promise<QueryExecutionState | undefined> {
     const client = await this.client;
     const input: GetQueryExecutionInput = {

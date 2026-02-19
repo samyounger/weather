@@ -1,10 +1,9 @@
 import { ObservationQueries } from "./observation-queries";
-import { ValidatedQueryStringParams } from "../services/query-string-param-validator";
 
 describe('ObservationQueries', () => {
   describe('.getObservationsByDateRange', () => {
     it('returns a SQL query string with datetime and partition predicates', () => {
-      const dateProps: ValidatedQueryStringParams = {
+      const dateProps = {
         fields: ['winddirection', 'airtemperature'],
         from: new Date('2026-02-19T00:15:00Z'),
         to: new Date('2026-02-19T02:20:00Z'),
