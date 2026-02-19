@@ -138,4 +138,53 @@ describe('refine backfill worker', () => {
       insertedRows: 0,
     });
   });
+
+  it('should throw when start query does not return an execution id', async () => {
+    s3SendMock.mockResolvedValueOnce({
+      Body: Readable.from([JSON.stringify(['2024-08-05'])]),
+    });
+    athenaSendMock.mockResolvedValueOnce({});
+
+    const { handler } = await import('./refine-worker');
+
+    await expect(handler({
+      bucket: 'weather-tempest-records',
+      chunkKey: 'backfill/refined-15m/runs/test/chunks/chunk-00000.json',
+    })).rejects.toThrow('Failed to start Athena query');
+  });
+
+  it('should throw when query polling reaches timeout', async () => {
+    process.env.BACKFILL_MAX_POLLS = '0';
+    s3SendMock.mockResolvedValueOnce({
+      Body: Readable.from([JSON.stringify(['2024-08-05'])]),
+    });
+
+    athenaSendMock
+      .mockResolvedValueOnce({ QueryExecutionId: 'query-timeout' })
+      .mockResolvedValueOnce({ QueryExecution: { Status: { State: QueryExecutionState.RUNNING } } });
+
+    const { handler } = await import('./refine-worker');
+
+    await expect(handler({
+      bucket: 'weather-tempest-records',
+      chunkKey: 'backfill/refined-15m/runs/test/chunks/chunk-00000.json',
+    })).rejects.toThrow('Athena query query-timeout failed with state: undefined');
+  });
+
+  it('should throw when chunk contains an invalid date', async () => {
+    s3SendMock.mockResolvedValueOnce({
+      Body: Readable.from([JSON.stringify(['2024/08/05'])]),
+    });
+
+    athenaSendMock
+      .mockResolvedValueOnce({ QueryExecutionId: 'query-create' })
+      .mockResolvedValueOnce({ QueryExecution: { Status: { State: QueryExecutionState.SUCCEEDED } } });
+
+    const { handler } = await import('./refine-worker');
+
+    await expect(handler({
+      bucket: 'weather-tempest-records',
+      chunkKey: 'backfill/refined-15m/runs/test/chunks/chunk-00000.json',
+    })).rejects.toThrow('Invalid date in chunk: 2024/08/05');
+  });
 });
