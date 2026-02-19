@@ -270,6 +270,7 @@ Resources:
             Resource:
               - !Sub arn:aws:states:${ArtifactRegion}:${ArtifactAccountId}:stateMachine:tempest-weather-backfill-*
               - !Sub arn:aws:states:${ArtifactRegion}:${ArtifactAccountId}:stateMachine:BackfillStateMachine-*
+              - !Sub arn:aws:states:${ArtifactRegion}:${ArtifactAccountId}:stateMachine:RefinedBackfillStateMachine-*
 
   GitHubTempestCfnDeployRoleAlertsManagedPolicy:
     Type: AWS::IAM::ManagedPolicy
