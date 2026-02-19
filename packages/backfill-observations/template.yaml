@@ -395,6 +395,12 @@ Resources:
                 - states:DescribeExecution
                 - states:StopExecution
               Resource: !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:execution:*
+            - Effect: Allow
+              Action:
+                - events:PutRule
+                - events:PutTargets
+                - events:DescribeRule
+              Resource: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/StepFunctionsGetEventsForStepFunctionsExecutionRule
         - LambdaInvokePolicy:
             FunctionName: !Ref BackfillPlannerFunction
         - LambdaInvokePolicy:
