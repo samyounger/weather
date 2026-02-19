@@ -1,5 +1,5 @@
 import { handler } from './index';
-import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
+import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from "aws-lambda";
 
 const mockDatabaseGetResults = jest.fn().mockReturnValue(new Promise((resolve) => {
   setTimeout(() => {
@@ -52,9 +52,12 @@ const mockEvent: APIGatewayProxyEvent = {
 
 describe('handler', () => {
   let subject: APIGatewayProxyResult;
+  const mockContext: Context = {
+    getRemainingTimeInMillis: () => 60000,
+  } as Context;
 
   const callHandler = async () => {
-    const query = handler(mockEvent);
+    const query = handler(mockEvent, mockContext);
     subject = await query;
   };
 

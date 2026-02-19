@@ -121,6 +121,24 @@ Resources:
           TEMPEST_TOKEN: !Ref TempestToken
           TEMPEST_DEVICE_ID: !Ref TempestDeviceId
           TEMPEST_STATION_ID: !Ref TempestStationId
+          ATHENA_WORKGROUP: !Ref TempestAthenaWorkGroup
+          QUERY_TIMEOUT_MS: "25000"
+          QUERY_TIMEOUT_SAFETY_BUFFER_MS: "5000"
+  TempestAthenaWorkGroup:
+    Type: AWS::Athena::WorkGroup
+    Properties:
+      Name: !Sub "${AWS::StackName}-fetch-observations"
+      Description: Bounded Athena workgroup for fetch-observations API queries.
+      RecursiveDeleteOption: true
+      State: ENABLED
+      WorkGroupConfiguration:
+        EnforceWorkGroupConfiguration: true
+        PublishCloudWatchMetricsEnabled: true
+        BytesScannedCutoffPerQuery: 500000000
+        ResultConfiguration:
+          OutputLocation: "s3://weather-tempest-records/queries/"
+          EncryptionConfiguration:
+            EncryptionOption: SSE_S3
   TempestLambdaDependencies:
     Type: AWS::Serverless::LayerVersion
     Properties:

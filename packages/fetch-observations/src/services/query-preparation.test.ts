@@ -113,6 +113,17 @@ describe('QueryPreparation', () => {
           expect(subject).toEqual('Failed to process Athena query');
         });
       });
+
+      describe('when the query times out and is cancelled', () => {
+        beforeEach(async () => {
+          mockQueryExecutionState.mockReturnValue(QueryExecutionState.CANCELLED);
+          await setupService();
+        });
+
+        it('should return timeout message', () => {
+          expect(subject).toEqual('Athena query timed out and was cancelled');
+        });
+      });
     });
 
     describe('when the query is not created', () => {
