@@ -39,7 +39,7 @@ jobs:
           run_workspace_build() {
             local workspace="$1"
             echo "Running build for $workspace"
-            npm run build --workspace="cloud-computing"
+            npm run build --workspace="@workspace/cloud-computing"
             npm run build --workspace="$workspace"
           }
 
