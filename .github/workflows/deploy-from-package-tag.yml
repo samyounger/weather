@@ -1,6 +1,9 @@
 name: Deploy From Package Tag
 
 on:
+  push:
+    tags:
+      - "pkg/*/v*"
   workflow_dispatch:
     inputs:
       package_tag:
@@ -17,6 +20,7 @@ jobs:
   parse-tag:
     runs-on: ubuntu-latest
     outputs:
+      package_tag: ${{ steps.parse.outputs.package_tag }}
       package: ${{ steps.parse.outputs.package }}
       version: ${{ steps.parse.outputs.version }}
       environment: ${{ steps.parse.outputs.environment }}
@@ -29,7 +33,11 @@ jobs:
         id: parse
         run: |
           set -euo pipefail
-          tag="${{ inputs.package_tag }}"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="${{ inputs.package_tag }}"
+          fi
           # Expected format: pkg/<package>/v<semver>
           if ! echo "$tag" | grep -Eq '^pkg/.+/v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "Invalid package_tag format: $tag"
@@ -87,6 +95,7 @@ jobs:
             stack_url="https://eu-west-2.console.aws.amazon.com/cloudformation/home?region=eu-west-2#/stacks/stackinfo?stackId=${stack_name}"
           fi
 
+          echo "package_tag=$tag" >> "$GITHUB_OUTPUT"
           echo "package=$package" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "environment=$environment" >> "$GITHUB_OUTPUT"
@@ -273,7 +282,7 @@ jobs:
           {
             echo "## Deploy From Tag Summary"
             echo
-            echo "- Tag: \`${{ inputs.package_tag }}\`"
+            echo "- Tag: \`${{ needs.parse-tag.outputs.package_tag }}\`"
             echo "- Package: \`${{ needs.parse-tag.outputs.package }}\`"
             echo "- Version: \`${{ needs.parse-tag.outputs.version }}\`"
             echo "- Environment: \`${{ needs.parse-tag.outputs.environment }}\`"
