@@ -21,9 +21,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         body: JSON.stringify({ error: queryStringParamValidator.returnError() }),
       };
     }
+    const validatedParameters = queryStringParamValidator.validated();
+    if (!validatedParameters) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Unable to parse query parameters' }),
+      };
+    }
 
     const databaseService = new Database();
-    const queryPreparation = new QueryPreparation(databaseService, parameters);
+    const queryPreparation = new QueryPreparation(databaseService, validatedParameters);
     const queryPreparationValid = await queryPreparation.valid();
     if (!queryPreparationValid) {
       return {

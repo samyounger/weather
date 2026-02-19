@@ -1,7 +1,7 @@
 import { Database } from "packages/cloud-computing";
 import { QueryExecutionState, StartQueryExecutionOutput } from "@aws-sdk/client-athena";
 import { ObservationQueries } from "../queries/observation-queries";
-import { QueryStringParams } from "./query-string-param-validator";
+import { ValidatedQueryStringParams } from "./query-string-param-validator";
 
 export class QueryPreparation {
   public queryResponse: StartQueryExecutionOutput = {};
@@ -10,7 +10,7 @@ export class QueryPreparation {
 
   public constructor(
     private databaseService: Database,
-    private parameters: QueryStringParams,
+    private parameters: ValidatedQueryStringParams,
   ) {}
 
   public async valid(): Promise<boolean> {

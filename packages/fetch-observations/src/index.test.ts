@@ -14,10 +14,19 @@ jest.mock('@weather/cloud-computing', () => ({
 
 const mockQueryParamValidatorValid = jest.fn().mockReturnValue(true);
 const mockQueryParamValidatorErrorMessage = jest.fn().mockReturnValue('Mock error message one');
+const mockQueryParamValidatorValidated = jest.fn().mockReturnValue({
+  from: new Date('2026-02-19T00:00:00Z'),
+  to: new Date('2026-02-19T01:00:00Z'),
+  fromEpochSeconds: 1771459200,
+  toEpochSeconds: 1771462800,
+  fields: ['datetime', 'winddirection'],
+  limit: 100,
+});
 jest.mock('./services/query-string-param-validator', () => ({
   QueryStringParamValidator: jest.fn().mockImplementation(() => ({
     valid: mockQueryParamValidatorValid,
     returnError: mockQueryParamValidatorErrorMessage,
+    validated: mockQueryParamValidatorValidated,
   })),
 }));
 
@@ -34,12 +43,10 @@ jest.mock('./services/query-preparation', () => ({
 
 const mockEvent: APIGatewayProxyEvent = {
   queryStringParameters: {
-    columns: 'columnOne',
-    year: '2024',
-    month: '01',
-    day: '02',
-    hourMin: '00',
-    hourMax: '23',
+    from: '2026-02-19T00:00:00Z',
+    to: '2026-02-19T01:00:00Z',
+    fields: 'datetime,winddirection',
+    limit: '100',
   },
 } as unknown as APIGatewayProxyEvent;
 
@@ -75,6 +82,31 @@ describe('handler', () => {
   describe('when query params are valid', () => {
     beforeEach(() => {
       mockQueryParamValidatorValid.mockReturnValue(true);
+      mockQueryParamValidatorValidated.mockReturnValue({
+        from: new Date('2026-02-19T00:00:00Z'),
+        to: new Date('2026-02-19T01:00:00Z'),
+        fromEpochSeconds: 1771459200,
+        toEpochSeconds: 1771462800,
+        fields: ['datetime', 'winddirection'],
+        limit: 100,
+      });
+    });
+
+    describe('when parsed query params are unavailable', () => {
+      beforeEach(async () => {
+        mockQueryParamValidatorValidated.mockReturnValue(undefined);
+        await callHandler();
+      });
+
+      it('should return 400', () => {
+        expect(subject.statusCode).toBe(400);
+      });
+
+      it('should return an error message', () => {
+        expect(subject.body).toEqual(JSON.stringify({
+          error: 'Unable to parse query parameters',
+        }));
+      });
     });
 
     describe('when query preparation fails', () => {

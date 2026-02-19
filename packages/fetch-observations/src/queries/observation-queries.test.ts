@@ -1,37 +1,26 @@
 import { ObservationQueries } from "./observation-queries";
-import { QueryStringParams } from "../services/query-string-param-validator";
+import { ValidatedQueryStringParams } from "../services/query-string-param-validator";
 
 describe('ObservationQueries', () => {
   describe('.getObservationsByDateRange', () => {
-    describe('when called with a year, month, day, hourMin, and hourMax', () => {
-      const columns = ['windDirection', 'temperature', 'humidity'].join(',');
-      const dateProps: QueryStringParams = {
-        columns,
-        year: '2021',
-        monthMin: '01',
-        monthMax: '02',
-        dayMin: '03',
-        dayMax: '04',
-        hourMin: '05',
-        hourMax: '06',
+    it('returns a SQL query string with datetime and partition predicates', () => {
+      const dateProps: ValidatedQueryStringParams = {
+        fields: ['winddirection', 'airtemperature'],
+        from: new Date('2026-02-19T00:15:00Z'),
+        to: new Date('2026-02-19T02:20:00Z'),
+        fromEpochSeconds: 1771460100,
+        toEpochSeconds: 1771467600,
+        limit: 25,
       };
-      let subject: string;
 
-      const expectedQuery = `\n
-      SELECT windDirection,temperature,humidity FROM observations\n
-      WHERE year='2021'\n
-      AND month>='01' AND month<='02'\n
-      AND day>='03' AND day<='04'\n
-      AND hour>='05' AND hour<='06'\n
-      ORDER BY windDirection DESC LIMIT 100;`;
+      const subject = ObservationQueries.getObservationsByDateRange(dateProps);
 
-      beforeEach(() => {
-        subject = ObservationQueries.getObservationsByDateRange(dateProps);
-      });
-
-      it('returns a SQL query string', () => {
-        expect(subject).toEqual(expectedQuery);
-      });
+      expect(subject).toEqual(`
+      SELECT winddirection,airtemperature FROM observations
+      WHERE datetime >= 1771460100
+      AND datetime <= 1771467600
+      AND ((year='2026' AND month='02' AND day='19' AND hour='00') OR (year='2026' AND month='02' AND day='19' AND hour='01') OR (year='2026' AND month='02' AND day='19' AND hour='02'))
+      ORDER BY datetime ASC LIMIT 25;`);
     });
   });
 });
