@@ -2,8 +2,9 @@
 
 ## Purpose
 
-One-off backfill workflow for historical Athena partition registration.
-Used to discover partition keys from existing S3 data and register them in controlled chunks.
+One-off backfill workflows for:
+- historical Athena partition registration
+- historical refined 15-minute aggregate generation
 
 ## Runtime Behavior
 
@@ -11,6 +12,8 @@ Used to discover partition keys from existing S3 data and register them in contr
 - Planner Lambda scans S3 and writes manifest/chunk files.
 - Map state processes chunk keys with worker Lambda.
 - Worker submits batched Athena `ALTER TABLE ... ADD IF NOT EXISTS PARTITION ...` statements.
+- Refine planner Lambda builds date-range chunk files (`YYYY-MM-DD`).
+- Refine worker Lambda inserts missing refined rows into `observations_refined_15m`.
 - Summarize Lambda reports chunk success/failure totals and failed chunk keys for reruns.
 
 ## Inputs and Defaults

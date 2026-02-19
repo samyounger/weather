@@ -15,12 +15,25 @@ Parameters:
     Type: String
     Default: backfill/athena-partitions
     Description: Prefix where run manifests and partition chunks are stored.
+  RefinedBackfillOutputPrefix:
+    Type: String
+    Default: backfill/refined-15m
+    Description: Prefix where refined backfill manifests and date chunks are stored.
   AthenaDatabase:
     Type: String
     Default: tempest_weather
   AthenaTable:
     Type: String
     Default: observations
+  RefinedAthenaRawTable:
+    Type: String
+    Default: observations
+  RefinedAthenaTable:
+    Type: String
+    Default: observations_refined_15m
+  RefinedAthenaLocation:
+    Type: String
+    Default: s3://weather-tempest-records/refined/observations_refined_15m/
   AthenaOutputLocation:
     Type: String
     Default: s3://weather-tempest-records/queries/
@@ -30,6 +43,9 @@ Parameters:
   ChunkSize:
     Type: Number
     Default: 100
+  RefinedChunkSize:
+    Type: Number
+    Default: 30
   AlertEmail:
     Type: String
     Default: ''
@@ -144,6 +160,91 @@ Resources:
                 - glue:GetTables
                 - glue:GetPartition
                 - glue:GetPartitions
+                - glue:CreatePartition
+                - glue:BatchCreatePartition
+              Resource: '*'
+  RefinedBackfillPlannerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs24.x
+      Handler: refine-planner.handler
+      CodeUri: function/.
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          BACKFILL_BUCKET: !Ref BackfillBucket
+          BACKFILL_REFINED_OUTPUT_PREFIX: !Ref RefinedBackfillOutputPrefix
+          BACKFILL_REFINED_CHUNK_SIZE: !Ref RefinedChunkSize
+          BACKFILL_ATHENA_DATABASE: !Ref AthenaDatabase
+          BACKFILL_REFINED_RAW_TABLE: !Ref RefinedAthenaRawTable
+          BACKFILL_REFINED_TABLE: !Ref RefinedAthenaTable
+          BACKFILL_REFINED_LOCATION: !Ref RefinedAthenaLocation
+          BACKFILL_ATHENA_OUTPUT: !Ref AthenaOutputLocation
+          BACKFILL_ATHENA_WORKGROUP: !Ref AthenaWorkGroup
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+              Resource: !Sub arn:aws:s3:::${BackfillBucket}/*
+  RefinedBackfillWorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs24.x
+      Handler: refine-worker.handler
+      CodeUri: function/.
+      Timeout: 900
+      MemorySize: 1024
+      Environment:
+        Variables:
+          BACKFILL_ATHENA_DATABASE: !Ref AthenaDatabase
+          BACKFILL_REFINED_RAW_TABLE: !Ref RefinedAthenaRawTable
+          BACKFILL_REFINED_TABLE: !Ref RefinedAthenaTable
+          BACKFILL_REFINED_LOCATION: !Ref RefinedAthenaLocation
+          BACKFILL_ATHENA_OUTPUT: !Ref AthenaOutputLocation
+          BACKFILL_ATHENA_WORKGROUP: !Ref AthenaWorkGroup
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource: !Sub arn:aws:s3:::${BackfillBucket}/*
+            - Effect: Allow
+              Action:
+                - s3:GetBucketLocation
+                - s3:ListBucket
+                - s3:ListBucketMultipartUploads
+              Resource: !Sub arn:aws:s3:::${BackfillBucket}
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:PutObjectAcl
+                - s3:GetObject
+                - s3:AbortMultipartUpload
+                - s3:ListMultipartUploadParts
+              Resource:
+                - !Sub arn:aws:s3:::${BackfillBucket}/queries/*
+                - !Sub arn:aws:s3:::${BackfillBucket}/refined/*
+            - Effect: Allow
+              Action:
+                - athena:StartQueryExecution
+                - athena:GetQueryExecution
+                - athena:GetQueryResults
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - glue:GetDatabase
+                - glue:GetDatabases
+                - glue:GetTable
+                - glue:GetTables
+                - glue:GetPartition
+                - glue:GetPartitions
+                - glue:CreateTable
+                - glue:UpdateTable
                 - glue:CreatePartition
                 - glue:BatchCreatePartition
               Resource: '*'
@@ -275,6 +376,135 @@ Resources:
             FunctionName: !Ref BackfillWorkerFunction
         - LambdaInvokePolicy:
             FunctionName: !Ref BackfillSummarizeFunction
+  RefinedBackfillStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Type: STANDARD
+      Definition:
+        Comment: Backfill historical refined 15-minute records into Athena.
+        StartAt: EnsureMaxConcurrency
+        States:
+          EnsureMaxConcurrency:
+            Type: Choice
+            Choices:
+              - Variable: $.maxConcurrency
+                IsPresent: true
+                Next: DetermineChunkSource
+            Default: SetDefaultMaxConcurrency
+          SetDefaultMaxConcurrency:
+            Type: Pass
+            Result: 3
+            ResultPath: $.maxConcurrency
+            Next: DetermineChunkSource
+          DetermineChunkSource:
+            Type: Choice
+            Choices:
+              - Variable: $.chunkKeys[0]
+                IsPresent: true
+                Next: ProcessChunks
+            Default: RunPlanner
+          RunPlanner:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              FunctionName: !GetAtt RefinedBackfillPlannerFunction.Arn
+              Payload:
+                bucket.$: $.bucket
+                outputPrefix.$: $.outputPrefix
+                chunkSize.$: $.chunkSize
+                maxConcurrency.$: $.maxConcurrency
+                startDate.$: $.startDate
+                endDate.$: $.endDate
+                database.$: $.database
+                rawTable.$: $.rawTable
+                refinedTable.$: $.refinedTable
+                refinedLocation.$: $.refinedLocation
+                outputLocation.$: $.outputLocation
+                workGroup.$: $.workGroup
+            Next: EnsureMaxConcurrency
+          ProcessChunks:
+            Type: Map
+            ItemsPath: $.chunkKeys
+            ResultPath: $.chunkResults
+            MaxConcurrencyPath: $.maxConcurrency
+            ItemSelector:
+              chunkKey.$: $$.Map.Item.Value
+              bucket.$: $.bucket
+              database.$: $.database
+              rawTable.$: $.rawTable
+              refinedTable.$: $.refinedTable
+              refinedLocation.$: $.refinedLocation
+              outputLocation.$: $.outputLocation
+              workGroup.$: $.workGroup
+            ItemProcessor:
+              StartAt: RunWorker
+              States:
+                RunWorker:
+                  Type: Task
+                  Resource: arn:aws:states:::lambda:invoke
+                  OutputPath: $.Payload
+                  Parameters:
+                    FunctionName: !GetAtt RefinedBackfillWorkerFunction.Arn
+                    Payload:
+                      bucket.$: $.bucket
+                      chunkKey.$: $.chunkKey
+                      database.$: $.database
+                      rawTable.$: $.rawTable
+                      refinedTable.$: $.refinedTable
+                      refinedLocation.$: $.refinedLocation
+                      outputLocation.$: $.outputLocation
+                      workGroup.$: $.workGroup
+                  Next: ChunkSucceeded
+                  Catch:
+                    - ErrorEquals:
+                        - States.ALL
+                      ResultPath: $.error
+                      Next: ChunkFailed
+                ChunkSucceeded:
+                  Type: Pass
+                  Parameters:
+                    success: true
+                    chunkKey.$: $.chunkKey
+                    result.$: $
+                  End: true
+                ChunkFailed:
+                  Type: Pass
+                  Parameters:
+                    success: false
+                    chunkKey.$: $.chunkKey
+                    error.$: $.error
+                  End: true
+            Next: SummarizeResults
+          SummarizeResults:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            OutputPath: $.Payload
+            Parameters:
+              FunctionName: !GetAtt BackfillSummarizeFunction.Arn
+              Payload:
+                chunkResults.$: $.chunkResults
+            Next: CheckSummaryFailures
+          CheckSummaryFailures:
+            Type: Choice
+            Choices:
+              - Variable: $.failedChunks
+                NumericGreaterThan: 0
+                Next: BackfillFailed
+            Default: Done
+          BackfillFailed:
+            Type: Fail
+            Error: BackfillChunkFailures
+            Cause: Refined backfill execution completed with failed chunks.
+          Done:
+            Type: Succeed
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref RefinedBackfillPlannerFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref RefinedBackfillWorkerFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref BackfillSummarizeFunction
   BackfillExecutionStatusEventRule:
     Type: AWS::Events::Rule
     Condition: HasAlertEmail
@@ -292,6 +522,7 @@ Resources:
             - ABORTED
           stateMachineArn:
             - !Ref BackfillStateMachine
+            - !Ref RefinedBackfillStateMachine
       Targets:
         - Arn: !Ref AlertsTopic
           Id: BackfillExecutionStatusAlertTarget
@@ -441,3 +672,9 @@ Outputs:
     Value: !GetAtt BackfillWorkerFunction.Arn
   BackfillSummarizeFunctionArn:
     Value: !GetAtt BackfillSummarizeFunction.Arn
+  RefinedBackfillStateMachineArn:
+    Value: !Ref RefinedBackfillStateMachine
+  RefinedBackfillPlannerFunctionArn:
+    Value: !GetAtt RefinedBackfillPlannerFunction.Arn
+  RefinedBackfillWorkerFunctionArn:
+    Value: !GetAtt RefinedBackfillWorkerFunction.Arn

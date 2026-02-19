@@ -1,14 +1,17 @@
-# Athena Partition Backfill
+# Athena Backfill Workflows
 
-
-This folder contains a one-off backfill workflow that discovers historical S3 partitions and registers them in Athena.
+This folder contains one-off backfill workflows for:
+- historical raw partition registration in Athena
+- historical refined 15-minute aggregate generation
 
 ## Files
 
 - `planner.ts`: scans S3 object keys, extracts `year/month/day/hour` partitions, writes chunk files + manifest.
-- `worker.ts`: reads one chunk, executes batched `ALTER TABLE ... ADD IF NOT EXISTS PARTITION ...` in Athena.
+- `worker.ts`: reads one partition chunk, executes batched `ALTER TABLE ... ADD IF NOT EXISTS PARTITION ...` in Athena.
+- `refine-planner.ts`: builds day-range chunks (`YYYY-MM-DD`) for refined backfill runs.
+- `refine-worker.ts`: processes day chunks and inserts 15-minute refined rows into `observations_refined_15m`.
 - `summarize.ts`: summarizes chunk outcomes and returns `failedChunkKeys` for retry runs.
-- `template.yaml`: SAM template for planner/worker/summarize Lambdas and a Step Functions state machine.
+- `template.yaml`: SAM template for planner/worker/summarize/refine Lambdas and Step Functions state machines.
 
 ## Prerequisites
 
@@ -25,7 +28,7 @@ Run from repo root:
 npm run deploy --workspace=@weather/backfill-observations
 ```
 
-## Start execution
+## Start execution (partition metadata backfill)
 
 Example execution input:
 
@@ -49,6 +52,35 @@ Start the run:
 aws stepfunctions start-execution \
   --state-machine-arn <BACKFILL_STATE_MACHINE_ARN> \
   --input file://input.json
+```
+
+## Start execution (refined 15-minute historical backfill)
+
+Example execution input:
+
+```json
+{
+  "bucket": "weather-tempest-records",
+  "outputPrefix": "backfill/refined-15m",
+  "chunkSize": 30,
+  "maxConcurrency": 3,
+  "startDate": "2024-01-01",
+  "endDate": "2026-02-18",
+  "database": "tempest_weather",
+  "rawTable": "observations",
+  "refinedTable": "observations_refined_15m",
+  "refinedLocation": "s3://weather-tempest-records/refined/observations_refined_15m/",
+  "outputLocation": "s3://weather-tempest-records/queries/",
+  "workGroup": "primary"
+}
+```
+
+Start the run:
+
+```bash
+aws stepfunctions start-execution \
+  --state-machine-arn <REFINED_BACKFILL_STATE_MACHINE_ARN> \
+  --input file://input-refined.json
 ```
 
 ## Monitoring
@@ -89,3 +121,4 @@ Use failed chunk keys from the previous execution output to rerun only failed ch
 - If `chunkKeys` are provided in execution input, planner is skipped and only those chunks are processed.
 - Tune `chunkSize` and `maxConcurrency` (execution input field, default `3`) if Athena throttles.
 - Safe rerun strategy: rerun with `failedChunkKeys`.
+- Refined backfill is idempotent at day-level: if rows already exist for a date, that date is skipped.
