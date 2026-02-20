@@ -1,4 +1,5 @@
 import { ValidatedQueryStringParams } from "../services/query-string-param-validator";
+import { QueryTarget } from "../services/query-target";
 
 type SyncValidatedQueryStringParams = Required<Pick<
   ValidatedQueryStringParams,
@@ -6,8 +7,6 @@ type SyncValidatedQueryStringParams = Required<Pick<
 >>;
 
 export class ObservationQueries {
-  private static TABLE_NAME = 'observations';
-
   public static getObservationsByDateRange({
     fields,
     from,
@@ -16,12 +15,57 @@ export class ObservationQueries {
     toEpochSeconds,
     limit,
   }: SyncValidatedQueryStringParams): string {
+    return this.getByDateRange({
+      tableName: 'observations',
+      timestampColumn: 'datetime',
+      fields,
+      from,
+      to,
+      fromEpochSeconds,
+      toEpochSeconds,
+      limit,
+    });
+  }
+
+  public static getRefinedByDateRange({
+    fields,
+    from,
+    to,
+    fromEpochSeconds,
+    toEpochSeconds,
+    limit,
+  }: SyncValidatedQueryStringParams): string {
+    return this.getByDateRange({
+      tableName: 'observations_refined_15m',
+      timestampColumn: 'period_start',
+      fields,
+      from,
+      to,
+      fromEpochSeconds,
+      toEpochSeconds,
+      limit,
+    });
+  }
+
+  public static getByDateRange({
+    tableName,
+    timestampColumn,
+    fields,
+    from,
+    to,
+    fromEpochSeconds,
+    toEpochSeconds,
+    limit,
+  }: SyncValidatedQueryStringParams & Pick<QueryTarget, 'tableName' | 'timestampColumn'>): string {
+    const rangePredicate = timestampColumn === 'period_start'
+      ? `${timestampColumn} >= FROM_UNIXTIME(${fromEpochSeconds})\n      AND ${timestampColumn} <= FROM_UNIXTIME(${toEpochSeconds})`
+      : `${timestampColumn} >= ${fromEpochSeconds}\n      AND ${timestampColumn} <= ${toEpochSeconds}`;
+
     return `
-      SELECT ${fields.join(',')} FROM ${this.TABLE_NAME}
-      WHERE datetime >= ${fromEpochSeconds}
-      AND datetime <= ${toEpochSeconds}
+      SELECT ${fields.join(',')} FROM ${tableName}
+      WHERE ${rangePredicate}
       AND (${this.buildPartitionPredicate(from, to)})
-      ORDER BY datetime ASC LIMIT ${limit};`;
+      ORDER BY ${timestampColumn} ASC LIMIT ${limit};`;
   }
 
   private static buildPartitionPredicate(from: Date, to: Date): string {

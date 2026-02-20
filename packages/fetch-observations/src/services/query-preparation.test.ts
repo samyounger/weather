@@ -2,8 +2,9 @@ import { Database } from "@weather/cloud-computing";
 import { QueryPreparation } from "./query-preparation";
 import { ObservationQueries } from "../queries/observation-queries";
 import { QueryExecutionState } from "@aws-sdk/client-athena";
+import { OBSERVATIONS_QUERY_TARGET } from "./query-target";
 
-jest.spyOn(ObservationQueries, 'getObservationsByDateRange').mockReturnValue('SELECT * FROM observations');
+jest.spyOn(ObservationQueries, 'getByDateRange').mockReturnValue('SELECT * FROM observations');
 
 const mockQueryParams = {
   fields: ['datetime', 'winddirection'],
@@ -28,7 +29,7 @@ jest.mock('@weather/cloud-computing', () => ({
 
 describe('QueryPreparation', () => {
   const mockDatabaseService = () => new Database();
-  const service = () =>  new QueryPreparation(mockDatabaseService(), mockQueryParams);
+  const service = () =>  new QueryPreparation(mockDatabaseService(), mockQueryParams, OBSERVATIONS_QUERY_TARGET);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -81,10 +82,15 @@ describe('QueryPreparation', () => {
         mockQueryExecutionId.mockReturnValue({ QueryExecutionId: '12345' });
         mockQueryExecutionState.mockReturnValue(QueryExecutionState.SUCCEEDED);
         const database = mockDatabaseService() as unknown as { waitForQuery: jest.Mock };
-        const serviceWithTimeoutGuard = new QueryPreparation(database as unknown as Database, mockQueryParams, {
-          getRemainingTimeInMillis: () => 4000,
-          timeoutSafetyBufferMs: 5000,
-        });
+        const serviceWithTimeoutGuard = new QueryPreparation(
+          database as unknown as Database,
+          mockQueryParams,
+          OBSERVATIONS_QUERY_TARGET,
+          {
+            getRemainingTimeInMillis: () => 4000,
+            timeoutSafetyBufferMs: 5000,
+          },
+        );
 
         await serviceWithTimeoutGuard.valid();
 

@@ -1,4 +1,5 @@
 import { QueryStringParams, QueryStringParamValidator } from "./query-string-param-validator";
+import { OBSERVATIONS_QUERY_TARGET, REFINED_QUERY_TARGET } from "./query-target";
 
 const queryStringParams: QueryStringParams = {
   from: '2026-02-19T00:00:00Z',
@@ -10,7 +11,7 @@ const queryStringParams: QueryStringParams = {
 describe('QueryStringParamValidator', () => {
   describe('#valid', () => {
     it('returns true for a valid sync query', () => {
-      const service = new QueryStringParamValidator(queryStringParams);
+      const service = new QueryStringParamValidator(queryStringParams, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(true);
       expect(service.validated()).toEqual({
@@ -27,7 +28,7 @@ describe('QueryStringParamValidator', () => {
     });
 
     it('returns true for async poll requests with queryExecutionId only', () => {
-      const service = new QueryStringParamValidator({ mode: 'ASYNC', queryExecutionId: 'query-123', nextToken: 'abc' });
+      const service = new QueryStringParamValidator({ mode: 'ASYNC', queryExecutionId: 'query-123', nextToken: 'abc' }, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(true);
       expect(service.validated()).toEqual({
@@ -38,7 +39,7 @@ describe('QueryStringParamValidator', () => {
     });
 
     it('returns true for async poll requests without nextToken', () => {
-      const service = new QueryStringParamValidator({ mode: 'async', queryExecutionId: 'query-123' });
+      const service = new QueryStringParamValidator({ mode: 'async', queryExecutionId: 'query-123' }, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(true);
       expect(service.validated()).toEqual({
@@ -49,63 +50,63 @@ describe('QueryStringParamValidator', () => {
     });
 
     it('returns false when mode is invalid', () => {
-      const service = new QueryStringParamValidator({ mode: 'batch' });
+      const service = new QueryStringParamValidator({ mode: 'batch' }, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(false);
       expect(service.returnError()).toBe('mode must be sync or async');
     });
 
     it('returns false when required query parameters are missing', () => {
-      const service = new QueryStringParamValidator({ to: '2026-02-19T01:00:00Z' });
+      const service = new QueryStringParamValidator({ to: '2026-02-19T01:00:00Z' }, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(false);
       expect(service.returnError()).toBe('Missing required query parameters: from');
     });
 
     it('returns false when dates are invalid', () => {
-      const service = new QueryStringParamValidator({ from: 'bad', to: '2026-02-19T01:00:00Z' });
+      const service = new QueryStringParamValidator({ from: 'bad', to: '2026-02-19T01:00:00Z' }, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(false);
       expect(service.returnError()).toBe('from and to must be valid ISO-8601 date-time strings');
     });
 
     it('returns false when from is not earlier than to', () => {
-      const service = new QueryStringParamValidator({ from: '2026-02-19T01:00:00Z', to: '2026-02-19T01:00:00Z' });
+      const service = new QueryStringParamValidator({ from: '2026-02-19T01:00:00Z', to: '2026-02-19T01:00:00Z' }, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(false);
       expect(service.returnError()).toBe('from must be earlier than to');
     });
 
     it('returns false when range exceeds 7 days', () => {
-      const service = new QueryStringParamValidator({ from: '2026-02-01T00:00:00Z', to: '2026-02-09T00:00:01Z' });
+      const service = new QueryStringParamValidator({ from: '2026-02-01T00:00:00Z', to: '2026-02-09T00:00:01Z' }, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(false);
       expect(service.returnError()).toBe('Date range cannot exceed 7 days');
     });
 
     it('returns false when limit exceeds max', () => {
-      const service = new QueryStringParamValidator({ from: '2026-02-19T00:00:00Z', to: '2026-02-19T01:00:00Z', limit: '1001' });
+      const service = new QueryStringParamValidator({ from: '2026-02-19T00:00:00Z', to: '2026-02-19T01:00:00Z', limit: '1001' }, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(false);
       expect(service.returnError()).toBe('limit cannot exceed 1000');
     });
 
     it('returns false when limit is not a positive integer', () => {
-      const service = new QueryStringParamValidator({ from: '2026-02-19T00:00:00Z', to: '2026-02-19T01:00:00Z', limit: 'abc' });
+      const service = new QueryStringParamValidator({ from: '2026-02-19T00:00:00Z', to: '2026-02-19T01:00:00Z', limit: 'abc' }, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(false);
       expect(service.returnError()).toBe('limit must be a positive integer');
     });
 
     it('returns false when fields include unsupported columns', () => {
-      const service = new QueryStringParamValidator({ from: '2026-02-19T00:00:00Z', to: '2026-02-19T01:00:00Z', fields: 'winddirection,badfield' });
+      const service = new QueryStringParamValidator({ from: '2026-02-19T00:00:00Z', to: '2026-02-19T01:00:00Z', fields: 'winddirection,badfield' }, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(false);
       expect(service.returnError()).toBe('Unsupported fields requested: badfield');
     });
 
     it('applies defaults when optional params are omitted', () => {
-      const service = new QueryStringParamValidator({ from: '2026-02-19T00:00:00Z', to: '2026-02-19T01:00:00Z' });
+      const service = new QueryStringParamValidator({ from: '2026-02-19T00:00:00Z', to: '2026-02-19T01:00:00Z' }, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(true);
       expect(service.validated()).toMatchObject({
@@ -116,7 +117,7 @@ describe('QueryStringParamValidator', () => {
     });
 
     it('falls back to default fields when fields are blank', () => {
-      const service = new QueryStringParamValidator({ from: '2026-02-19T00:00:00Z', to: '2026-02-19T01:00:00Z', fields: ' , ' });
+      const service = new QueryStringParamValidator({ from: '2026-02-19T00:00:00Z', to: '2026-02-19T01:00:00Z', fields: ' , ' }, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(true);
       expect(service.validated()).toMatchObject({
@@ -127,16 +128,25 @@ describe('QueryStringParamValidator', () => {
 
   describe('#returnError', () => {
     it('returns default missing message before validation', () => {
-      const service = new QueryStringParamValidator(null);
+      const service = new QueryStringParamValidator(null, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.returnError()).toBe('Missing required query parameters');
     });
 
     it('returns missing parameter message when no params are present', () => {
-      const service = new QueryStringParamValidator(null);
+      const service = new QueryStringParamValidator(null, OBSERVATIONS_QUERY_TARGET);
 
       expect(service.valid()).toBe(false);
       expect(service.returnError()).toBe('Missing required query parameters');
+    });
+  });
+
+  it('applies refined defaults and refined field whitelist', () => {
+    const service = new QueryStringParamValidator({ from: '2026-02-19T00:00:00Z', to: '2026-02-19T01:00:00Z' }, REFINED_QUERY_TARGET);
+
+    expect(service.valid()).toBe(true);
+    expect(service.validated()).toMatchObject({
+      fields: ['period_start', 'winddirection_avg', 'windavg_avg', 'windgust_max', 'airtemperature_avg', 'relativehumidity_avg', 'rainaccumulation_sum'],
     });
   });
 });

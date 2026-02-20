@@ -22,4 +22,26 @@ describe('ObservationQueries', () => {
       ORDER BY datetime ASC LIMIT 25;`);
     });
   });
+
+  describe('.getRefinedByDateRange', () => {
+    it('returns a SQL query string for refined 15-minute rows', () => {
+      const dateProps = {
+        fields: ['period_start', 'windavg_avg'],
+        from: new Date('2026-02-19T00:15:00Z'),
+        to: new Date('2026-02-19T02:20:00Z'),
+        fromEpochSeconds: 1771460100,
+        toEpochSeconds: 1771467600,
+        limit: 25,
+      };
+
+      const subject = ObservationQueries.getRefinedByDateRange(dateProps);
+
+      expect(subject).toEqual(`
+      SELECT period_start,windavg_avg FROM observations_refined_15m
+      WHERE period_start >= FROM_UNIXTIME(1771460100)
+      AND period_start <= FROM_UNIXTIME(1771467600)
+      AND ((year='2026' AND month='02' AND day='19' AND hour='00') OR (year='2026' AND month='02' AND day='19' AND hour='01') OR (year='2026' AND month='02' AND day='19' AND hour='02'))
+      ORDER BY period_start ASC LIMIT 25;`);
+    });
+  });
 });
