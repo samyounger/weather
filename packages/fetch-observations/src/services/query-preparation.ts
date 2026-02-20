@@ -2,6 +2,7 @@ import { Database } from "@weather/cloud-computing";
 import { QueryExecutionState, StartQueryExecutionOutput } from "@aws-sdk/client-athena";
 import { ObservationQueries } from "../queries/observation-queries";
 import { ValidatedQueryStringParams } from "./query-string-param-validator";
+import { QueryTarget } from "./query-target";
 
 const DEFAULT_QUERY_TIMEOUT_MS = 25000;
 const DEFAULT_TIMEOUT_SAFETY_BUFFER_MS = 5000;
@@ -25,11 +26,15 @@ export class QueryPreparation {
   public constructor(
     private databaseService: Database,
     private parameters: SyncValidatedQueryStringParams,
+    private queryTarget: Pick<QueryTarget, 'tableName' | 'timestampColumn'>,
     private options: QueryPreparationOptions = {},
   ) {}
 
   public async valid(): Promise<boolean> {
-    const queryString = ObservationQueries.getObservationsByDateRange(this.parameters);
+    const queryString = ObservationQueries.getByDateRange({
+      ...this.parameters,
+      ...this.queryTarget,
+    });
     this.queryResponse = await this.databaseService.query(queryString);
 
     if (!this.queryCreated()) {

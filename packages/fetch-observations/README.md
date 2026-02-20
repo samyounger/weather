@@ -2,6 +2,11 @@
 
 Query weather observations from Athena using a bounded date/time range.
 
+## Endpoints
+
+- `/observations` (also `/`) queries the raw `observations` table.
+- `/refined` queries the `observations_refined_15m` table.
+
 ## API Query Modes
 
 ### 1. Sync mode (default)
@@ -18,7 +23,7 @@ Optional query params:
 
 Example:
 ```bash
-curl "https://<function-url>?from=2026-02-19T00:00:00Z&to=2026-02-19T01:00:00Z&fields=datetime,winddirection,airtemperature&limit=200"
+curl "https://<function-url>/observations?from=2026-02-19T00:00:00Z&to=2026-02-19T01:00:00Z&fields=datetime,winddirection,airtemperature&limit=200"
 ```
 
 ### 2. Async mode
@@ -31,7 +36,7 @@ Start query:
 - optional `fields`, `limit`
 
 ```bash
-curl "https://<function-url>?mode=async&from=2026-02-19T00:00:00Z&to=2026-02-19T06:00:00Z&fields=datetime,windavg,windgust"
+curl "https://<function-url>/observations?mode=async&from=2026-02-19T00:00:00Z&to=2026-02-19T06:00:00Z&fields=datetime,windavg,windgust"
 ```
 
 Response includes `queryExecutionId` with HTTP `202`.
@@ -42,7 +47,7 @@ Poll query:
 - optional `nextToken`
 
 ```bash
-curl "https://<function-url>?mode=async&queryExecutionId=<QUERY_ID>"
+curl "https://<function-url>/observations?mode=async&queryExecutionId=<QUERY_ID>"
 ```
 
 Possible async poll responses:
@@ -57,7 +62,7 @@ Both sync and async result fetches support pagination via `nextToken`.
 - Pass it back in the next request to continue reading rows.
 
 ## Field Selection
-`fields` must be a comma-separated subset of allowed columns from the `observations` table schema.
+`fields` must be a comma-separated subset of allowed columns for the endpoint you call (`/observations` or `/refined`).
 
 If unsupported fields are provided, request returns `400`.
 
@@ -91,6 +96,24 @@ If unsupported fields are provided, request returns `400`.
 - `day`
 - `hour`
 
+### Refined Endpoint Fields (`/refined`)
+
+- `period_start`
+- `winddirection_avg`
+- `windavg_avg`
+- `windgust_max`
+- `pressure_avg`
+- `airtemperature_avg`
+- `relativehumidity_avg`
+- `rainaccumulation_sum`
+- `uv_avg`
+- `solarradiation_avg`
+- `sample_count`
+- `year`
+- `month`
+- `day`
+- `hour`
+
 ## Validation and Limits
 
 - `from` and `to` must be valid ISO-8601 date-time strings.
@@ -112,4 +135,4 @@ If unsupported fields are provided, request returns `400`.
 - Response row count per page is bounded by Athena pagination and the configured `limit`.
 - Async mode requires client-managed polling and retry behavior.
 - If Athena query execution fails/cancels, API returns a server error response.
-- This package queries the raw `observations` table; downstream refined datasets are handled by other packages.
+- This package exposes both raw (`observations`) and refined (`observations_refined_15m`) query endpoints.

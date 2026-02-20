@@ -1,4 +1,5 @@
 import { APIGatewayProxyEventQueryStringParameters } from "aws-lambda/trigger/api-gateway-proxy";
+import { QueryTarget } from "./query-target";
 
 export interface QueryStringParams extends APIGatewayProxyEventQueryStringParameters {
   from?: string;
@@ -22,39 +23,9 @@ export interface ValidatedQueryStringParams {
   limit?: number;
 }
 
-const DEFAULT_FIELDS = ['datetime', 'winddirection', 'windavg', 'windgust', 'airtemperature', 'relativehumidity', 'rainaccumulation'];
 const MAX_LIMIT = 1000;
 const DEFAULT_LIMIT = 100;
 const MAX_RANGE_MS = 7 * 24 * 60 * 60 * 1000;
-const ALLOWED_FIELDS = new Set([
-  'deviceid',
-  'datetime',
-  'windlull',
-  'windavg',
-  'windgust',
-  'winddirection',
-  'windsampleinterval',
-  'pressure',
-  'airtemperature',
-  'relativehumidity',
-  'illuminance',
-  'uv',
-  'solarradiation',
-  'rainaccumulation',
-  'precipitationtype',
-  'avgstrikedistance',
-  'strikecount',
-  'battery',
-  'reportinterval',
-  'localdayrainaccumulation',
-  'ncrainaccumulation',
-  'localdayncrainaccumulation',
-  'precipitationanalysis',
-  'year',
-  'month',
-  'day',
-  'hour',
-]);
 
 const parseIsoDate = (input: string): Date | null => {
   const timestamp = Date.parse(input);
@@ -85,6 +56,7 @@ export class QueryStringParamValidator {
 
   public constructor(
     private queryStringParams: Partial<QueryStringParams> | null,
+    private queryTarget: QueryTarget,
   ) {}
 
   public valid(): boolean {
@@ -201,9 +173,9 @@ export class QueryStringParamValidator {
   private parseFields(): string[] | undefined {
     const fields = this.queryStringParams?.fields
       ? this.queryStringParams.fields.split(',').map((field) => field.trim().toLowerCase()).filter(Boolean)
-      : DEFAULT_FIELDS;
+      : this.queryTarget.defaultFields;
 
-    const invalidFields = fields.filter((field) => !ALLOWED_FIELDS.has(field));
+    const invalidFields = fields.filter((field) => !this.queryTarget.allowedFields.has(field));
     if (invalidFields.length > 0) {
       this.errorText = `Unsupported fields requested: ${invalidFields.join(', ')}`;
       return undefined;

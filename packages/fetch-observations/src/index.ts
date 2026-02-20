@@ -6,6 +6,7 @@ import { ObservationsFactory } from "./factories/observations-factory";
 import { ObservationQueries } from "./queries/observation-queries";
 import { QueryStringParams, QueryStringParamValidator, ValidatedQueryStringParams } from "./services/query-string-param-validator";
 import { QueryPreparation } from "./services/query-preparation";
+import { getQueryTargetFromPath, QueryTarget } from "./services/query-target";
 
 dotEnv.config({ path:'../../.env' });
 
@@ -31,13 +32,24 @@ const isSyncQueryParams = (parameters: ValidatedQueryStringParams): parameters i
 };
 
 export const handler = async (event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> => {
+  const endpointPath = (event as APIGatewayProxyEvent & { rawPath?: string }).rawPath ?? event.path;
+  const queryTarget = getQueryTargetFromPath(endpointPath);
   const parameters = event.queryStringParameters as QueryStringParams;
   console.info('fetch-observations invocation started', {
     service: 'fetch-observations',
+    endpointPath,
+    queryTarget: queryTarget?.tableName,
     parameters,
   });
   try {
-    const queryStringParamValidator = new QueryStringParamValidator(parameters);
+    if (!queryTarget) {
+      return {
+        statusCode: 404,
+        body: JSON.stringify({ error: 'Unsupported endpoint. Use /observations or /refined' }),
+      };
+    }
+
+    const queryStringParamValidator = new QueryStringParamValidator(parameters, queryTarget);
     if (!queryStringParamValidator.valid()) {
       return {
         statusCode: 400,
@@ -55,7 +67,7 @@ export const handler = async (event: APIGatewayProxyEvent, context: Context): Pr
     const databaseService = new Database();
 
     if (validatedParameters.mode === 'async') {
-      return await handleAsyncQuery(databaseService, validatedParameters);
+      return await handleAsyncQuery(databaseService, validatedParameters, queryTarget);
     }
 
     if (!isSyncQueryParams(validatedParameters)) {
@@ -66,6 +78,9 @@ export const handler = async (event: APIGatewayProxyEvent, context: Context): Pr
     }
 
     const queryPreparation = new QueryPreparation(databaseService, validatedParameters, {
+      tableName: queryTarget.tableName,
+      timestampColumn: queryTarget.timestampColumn,
+    }, {
       queryTimeoutMs: Number.parseInt(process.env.QUERY_TIMEOUT_MS ?? '25000', 10),
       timeoutSafetyBufferMs: Number.parseInt(process.env.QUERY_TIMEOUT_SAFETY_BUFFER_MS ?? '5000', 10),
       getRemainingTimeInMillis: context.getRemainingTimeInMillis,
@@ -93,6 +108,7 @@ export const handler = async (event: APIGatewayProxyEvent, context: Context): Pr
       statusCode: 200,
       body: JSON.stringify({
         mode: 'sync',
+        table: queryTarget.tableName,
         queryExecutionId,
         nextToken: queryResultsResponse.NextToken,
         parameters: event.queryStringParameters,
@@ -102,6 +118,8 @@ export const handler = async (event: APIGatewayProxyEvent, context: Context): Pr
   } catch (error) {
     console.error('fetch-observations invocation failed', {
       service: 'fetch-observations',
+      endpointPath,
+      queryTarget: queryTarget?.tableName,
       parameters,
       error,
     });
@@ -112,6 +130,7 @@ export const handler = async (event: APIGatewayProxyEvent, context: Context): Pr
 const handleAsyncQuery = async (
   databaseService: Database,
   validatedParameters: ValidatedQueryStringParams,
+  queryTarget: QueryTarget,
 ): Promise<APIGatewayProxyResult> => {
   if (validatedParameters.queryExecutionId) {
     const state = await databaseService.getQueryState(validatedParameters.queryExecutionId);
@@ -122,6 +141,7 @@ const handleAsyncQuery = async (
         statusCode: 200,
         body: JSON.stringify({
           mode: 'async',
+          table: queryTarget.tableName,
           status: QueryExecutionState.SUCCEEDED,
           queryExecutionId: validatedParameters.queryExecutionId,
           nextToken: queryResultsResponse.NextToken,
@@ -135,6 +155,7 @@ const handleAsyncQuery = async (
         statusCode: 500,
         body: JSON.stringify({
           mode: 'async',
+          table: queryTarget.tableName,
           status: state,
           queryExecutionId: validatedParameters.queryExecutionId,
           error: 'Athena query did not complete successfully',
@@ -146,6 +167,7 @@ const handleAsyncQuery = async (
       statusCode: 202,
       body: JSON.stringify({
         mode: 'async',
+        table: queryTarget.tableName,
         status: state,
         queryExecutionId: validatedParameters.queryExecutionId,
       }),
@@ -159,13 +181,18 @@ const handleAsyncQuery = async (
     };
   }
 
-  const queryString = ObservationQueries.getObservationsByDateRange(validatedParameters);
+  const queryString = ObservationQueries.getByDateRange({
+    ...validatedParameters,
+    tableName: queryTarget.tableName,
+    timestampColumn: queryTarget.timestampColumn,
+  });
   const queryResponse = await databaseService.query(queryString);
 
   return {
     statusCode: 202,
     body: JSON.stringify({
       mode: 'async',
+      table: queryTarget.tableName,
       status: QueryExecutionState.RUNNING,
       queryExecutionId: queryResponse.QueryExecutionId,
     }),

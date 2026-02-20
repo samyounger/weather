@@ -48,6 +48,7 @@ const mockContext: Context = {
 } as Context;
 
 const syncEvent: APIGatewayProxyEvent = {
+  path: '/observations',
   queryStringParameters: {
     from: '2026-02-19T00:00:00Z',
     to: '2026-02-19T01:00:00Z',
@@ -106,6 +107,7 @@ describe('handler', () => {
     expect(subject.statusCode).toBe(200);
     expect(subject.body).toEqual(JSON.stringify({
       mode: 'sync',
+      table: 'observations',
       queryExecutionId: '123',
       nextToken: 'next-1',
       parameters: {
@@ -113,6 +115,18 @@ describe('handler', () => {
       },
       data: [['2020-01-01T00:00:00Z']],
     }));
+  });
+
+  it('supports root path as observations endpoint', async () => {
+    const rootEvent = {
+      ...syncEvent,
+      path: '/',
+    };
+
+    await callHandler(rootEvent);
+
+    expect(subject.statusCode).toBe(200);
+    expect(subject.body).toContain('"table":"observations"');
   });
 
   it('returns 400 when validated query params are unavailable', async () => {
@@ -158,6 +172,7 @@ describe('handler', () => {
     expect(subject.statusCode).toBe(202);
     expect(subject.body).toEqual(JSON.stringify({
       mode: 'async',
+      table: 'observations',
       status: 'RUNNING',
       queryExecutionId: 'async-123',
     }));
@@ -181,11 +196,51 @@ describe('handler', () => {
     expect(subject.statusCode).toBe(200);
     expect(subject.body).toEqual(JSON.stringify({
       mode: 'async',
+      table: 'observations',
       status: 'SUCCEEDED',
       queryExecutionId: 'async-123',
       nextToken: 'next-1',
       data: [['2020-01-01T00:00:00Z']],
     }));
+  });
+
+  it('starts async query on refined endpoint and returns 202 with queryExecutionId', async () => {
+    const refinedEvent = {
+      ...syncEvent,
+      path: '/refined',
+    };
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'async',
+      from: new Date('2026-02-19T00:00:00Z'),
+      to: new Date('2026-02-19T01:00:00Z'),
+      fromEpochSeconds: 1771459200,
+      toEpochSeconds: 1771462800,
+      fields: ['period_start', 'windavg_avg'],
+      limit: 100,
+    });
+
+    await callHandler(refinedEvent);
+
+    expect(subject.statusCode).toBe(202);
+    expect(mockDatabaseQuery).toHaveBeenCalledWith(expect.stringContaining('FROM observations_refined_15m'));
+    expect(subject.body).toEqual(JSON.stringify({
+      mode: 'async',
+      table: 'observations_refined_15m',
+      status: 'RUNNING',
+      queryExecutionId: 'async-123',
+    }));
+  });
+
+  it('returns 404 for unsupported endpoint path', async () => {
+    const unknownPathEvent = {
+      ...syncEvent,
+      path: '/nope',
+    };
+
+    await callHandler(unknownPathEvent);
+
+    expect(subject.statusCode).toBe(404);
+    expect(subject.body).toEqual(JSON.stringify({ error: 'Unsupported endpoint. Use /observations or /refined' }));
   });
 
   it('returns 500 when async query fails', async () => {
