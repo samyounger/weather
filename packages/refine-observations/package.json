@@ -12,7 +12,7 @@
     "start": "npm run build && node -e 'require(\"./function/index.js\").handler({})'",
     "lint": "eslint .",
     "lint:fix": "npm run lint -- --fix",
-    "deploy": "npm run build --workspace=@weather/cloud-computing && npm run build --workspace=@weather/refine-observations && mkdir -p ../../lib/nodejs && rm -rf ../../lib/nodejs/node_modules && cp -RL ../../node_modules ../../lib/nodejs && sam build --config-env prod && sam deploy --config-env prod",
+    "deploy": "npm run build --workspace=@weather/cloud-computing && npm run build --workspace=@weather/refine-observations && node ../../scripts/prepare-lambda-layer.mjs @weather/refine-observations && sam build --config-env prod && sam deploy --config-env prod",
     "deploy:cleanup": "sam delete --config-env prod --no-prompts"
   },
   "author": "Sam Younger",
