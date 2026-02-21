@@ -107,6 +107,12 @@ runs:
             esac
 
             if [ "$include_workflow_deps" = "true" ]; then
+              case "$file" in
+                .github/workflows/tag-packages-on-merge.yml|.github/actions/detect-package-changes/action.yml)
+                  shared_all=true
+                  deploy_role=true
+                  ;;
+              esac
 
               case "$file" in
                 .github/workflows/reusable-deploy-sam-observations.yml)
@@ -119,6 +125,12 @@ runs:
               case "$file" in
                 .github/workflows/reusable-deploy-sam-backfill.yml)
                   backfill=true
+                  ;;
+              esac
+
+              case "$file" in
+                .github/workflows/reusable-deploy-cloud-computing.yml)
+                  cloud=true
                   ;;
               esac
             fi
