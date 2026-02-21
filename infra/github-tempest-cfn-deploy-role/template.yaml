@@ -212,6 +212,14 @@ Resources:
               - athena:StartQueryExecution
               - athena:GetQueryExecution
               - athena:GetQueryResults
+              - athena:CreateWorkGroup
+              - athena:UpdateWorkGroup
+              - athena:DeleteWorkGroup
+              - athena:GetWorkGroup
+              - athena:ListWorkGroups
+              - athena:TagResource
+              - athena:UntagResource
+              - athena:ListTagsForResource
             Resource: '*'
           - Sid: ReadLambdaExecutionRolesForDeploy
             Effect: Allow
