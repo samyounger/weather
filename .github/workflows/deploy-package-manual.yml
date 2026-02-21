@@ -14,10 +14,9 @@ on:
           - backfill-observations
           - cloud-computing
           - github-tempest-cfn-deploy-role
-      checkout_ref:
-        description: Git ref to deploy (tag, branch, or commit SHA)
+      release_tag:
+        description: Existing release tag to deploy (for example pkg/fetch-observations/v1.2.3)
         required: true
-        default: main
         type: string
 
 permissions:
@@ -25,14 +24,51 @@ permissions:
   contents: read
 
 jobs:
+  validate-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.validate.outputs.release_tag }}
+    steps:
+      - name: Validate selected package tag exists and matches package
+        id: validate
+        env:
+          PACKAGE: ${{ inputs.package }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          case "$PACKAGE" in
+            fetch-observations|store-observations|refine-observations|backfill-observations|cloud-computing|github-tempest-cfn-deploy-role)
+              expected_prefix="pkg/${PACKAGE}/v"
+              ;;
+            *)
+              echo "Unsupported package: $PACKAGE"
+              exit 1
+              ;;
+          esac
+
+          if [[ "$RELEASE_TAG" != ${expected_prefix}* ]]; then
+            echo "Tag must match package prefix '${expected_prefix}*'. Got: $RELEASE_TAG"
+            exit 1
+          fi
+
+          if ! git ls-remote --exit-code --tags "https://github.com/${REPOSITORY}.git" "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            echo "Tag does not exist: $RELEASE_TAG"
+            exit 1
+          fi
+
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
   deploy-fetch:
-    if: inputs.package == 'fetch-observations'
+    needs: validate-tag
+    if: inputs.package == 'fetch-observations' && needs.validate-tag.result == 'success'
     concurrency:
       group: deploy-prod-fetch-observations
       cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-observations.yml
     with:
-      checkout_ref: ${{ inputs.checkout_ref }}
+      checkout_ref: ${{ needs.validate-tag.outputs.release_tag }}
       package_workspace: "@weather/fetch-observations"
       package_directory: packages/fetch-observations
       artifact_bucket: tempest-artifacts-fetch-prod-926898703023
@@ -40,13 +76,14 @@ jobs:
     secrets: inherit
 
   deploy-store:
-    if: inputs.package == 'store-observations'
+    needs: validate-tag
+    if: inputs.package == 'store-observations' && needs.validate-tag.result == 'success'
     concurrency:
       group: deploy-prod-store-observations
       cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-observations.yml
     with:
-      checkout_ref: ${{ inputs.checkout_ref }}
+      checkout_ref: ${{ needs.validate-tag.outputs.release_tag }}
       package_workspace: "@weather/store-observations"
       package_directory: packages/store-observations
       artifact_bucket: tempest-artifacts-store-prod-926898703023
@@ -54,13 +91,14 @@ jobs:
     secrets: inherit
 
   deploy-refine:
-    if: inputs.package == 'refine-observations'
+    needs: validate-tag
+    if: inputs.package == 'refine-observations' && needs.validate-tag.result == 'success'
     concurrency:
       group: deploy-prod-refine-observations
       cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-observations.yml
     with:
-      checkout_ref: ${{ inputs.checkout_ref }}
+      checkout_ref: ${{ needs.validate-tag.outputs.release_tag }}
       package_workspace: "@weather/refine-observations"
       package_directory: packages/refine-observations
       artifact_bucket: tempest-artifacts-refine-prod-926898703023
@@ -68,30 +106,33 @@ jobs:
     secrets: inherit
 
   deploy-backfill:
-    if: inputs.package == 'backfill-observations'
+    needs: validate-tag
+    if: inputs.package == 'backfill-observations' && needs.validate-tag.result == 'success'
     concurrency:
       group: deploy-prod-backfill-observations
       cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-backfill.yml
     with:
-      checkout_ref: ${{ inputs.checkout_ref }}
+      checkout_ref: ${{ needs.validate-tag.outputs.release_tag }}
       artifact_bucket: tempest-artifacts-backfill-prod-926898703023
       stack_name: tempest-weather-backfill-lib
     secrets: inherit
 
   deploy-cloud:
-    if: inputs.package == 'cloud-computing'
+    needs: validate-tag
+    if: inputs.package == 'cloud-computing' && needs.validate-tag.result == 'success'
     uses: ./.github/workflows/reusable-deploy-cloud-computing.yml
     with:
-      checkout_ref: ${{ inputs.checkout_ref }}
+      checkout_ref: ${{ needs.validate-tag.outputs.release_tag }}
     secrets: inherit
 
   deploy-role-policy:
-    if: inputs.package == 'github-tempest-cfn-deploy-role'
+    needs: validate-tag
+    if: inputs.package == 'github-tempest-cfn-deploy-role' && needs.validate-tag.result == 'success'
     concurrency:
       group: deploy-prod-github-tempest-cfn-deploy-role
       cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-role-policy.yml
     with:
-      checkout_ref: ${{ inputs.checkout_ref }}
+      checkout_ref: ${{ needs.validate-tag.outputs.release_tag }}
     secrets: inherit
