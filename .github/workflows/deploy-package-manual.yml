@@ -1,0 +1,97 @@
+name: Deploy Package (Manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to deploy
+        required: true
+        type: choice
+        options:
+          - fetch-observations
+          - store-observations
+          - refine-observations
+          - backfill-observations
+          - cloud-computing
+          - github-tempest-cfn-deploy-role
+      checkout_ref:
+        description: Git ref to deploy (tag, branch, or commit SHA)
+        required: true
+        default: main
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-fetch:
+    if: inputs.package == 'fetch-observations'
+    concurrency:
+      group: deploy-prod-fetch-observations
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-sam-observations.yml
+    with:
+      checkout_ref: ${{ inputs.checkout_ref }}
+      package_workspace: "@weather/fetch-observations"
+      package_directory: packages/fetch-observations
+      artifact_bucket: tempest-artifacts-fetch-prod-926898703023
+      stack_name: tempest-weather-fetch-lib
+    secrets: inherit
+
+  deploy-store:
+    if: inputs.package == 'store-observations'
+    concurrency:
+      group: deploy-prod-store-observations
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-sam-observations.yml
+    with:
+      checkout_ref: ${{ inputs.checkout_ref }}
+      package_workspace: "@weather/store-observations"
+      package_directory: packages/store-observations
+      artifact_bucket: tempest-artifacts-store-prod-926898703023
+      stack_name: tempest-weather-store-lib
+    secrets: inherit
+
+  deploy-refine:
+    if: inputs.package == 'refine-observations'
+    concurrency:
+      group: deploy-prod-refine-observations
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-sam-observations.yml
+    with:
+      checkout_ref: ${{ inputs.checkout_ref }}
+      package_workspace: "@weather/refine-observations"
+      package_directory: packages/refine-observations
+      artifact_bucket: tempest-artifacts-refine-prod-926898703023
+      stack_name: tempest-weather-refine-lib
+    secrets: inherit
+
+  deploy-backfill:
+    if: inputs.package == 'backfill-observations'
+    concurrency:
+      group: deploy-prod-backfill-observations
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-sam-backfill.yml
+    with:
+      checkout_ref: ${{ inputs.checkout_ref }}
+      artifact_bucket: tempest-artifacts-backfill-prod-926898703023
+      stack_name: tempest-weather-backfill-lib
+    secrets: inherit
+
+  deploy-cloud:
+    if: inputs.package == 'cloud-computing'
+    uses: ./.github/workflows/reusable-deploy-cloud-computing.yml
+    with:
+      checkout_ref: ${{ inputs.checkout_ref }}
+    secrets: inherit
+
+  deploy-role-policy:
+    if: inputs.package == 'github-tempest-cfn-deploy-role'
+    concurrency:
+      group: deploy-prod-github-tempest-cfn-deploy-role
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-role-policy.yml
+    with:
+      checkout_ref: ${{ inputs.checkout_ref }}
+    secrets: inherit
