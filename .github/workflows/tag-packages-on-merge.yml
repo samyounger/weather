@@ -169,7 +169,7 @@ jobs:
     if: needs.prepare-release.outputs.cloud_changed == 'true'
     uses: ./.github/workflows/reusable-run-package-tests.yml
     with:
-      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      checkout_ref: ${{ needs.prepare-release.outputs.cloud_tag }}
       package: cloud-computing
     secrets: inherit
 
@@ -178,7 +178,7 @@ jobs:
     if: needs.prepare-release.outputs.store_changed == 'true'
     uses: ./.github/workflows/reusable-run-package-tests.yml
     with:
-      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      checkout_ref: ${{ needs.prepare-release.outputs.store_tag }}
       package: store-observations
     secrets: inherit
 
@@ -187,7 +187,7 @@ jobs:
     if: needs.prepare-release.outputs.fetch_changed == 'true'
     uses: ./.github/workflows/reusable-run-package-tests.yml
     with:
-      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      checkout_ref: ${{ needs.prepare-release.outputs.fetch_tag }}
       package: fetch-observations
     secrets: inherit
 
@@ -196,7 +196,7 @@ jobs:
     if: needs.prepare-release.outputs.refine_changed == 'true'
     uses: ./.github/workflows/reusable-run-package-tests.yml
     with:
-      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      checkout_ref: ${{ needs.prepare-release.outputs.refine_tag }}
       package: refine-observations
     secrets: inherit
 
@@ -205,7 +205,7 @@ jobs:
     if: needs.prepare-release.outputs.backfill_changed == 'true'
     uses: ./.github/workflows/reusable-run-package-tests.yml
     with:
-      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      checkout_ref: ${{ needs.prepare-release.outputs.backfill_tag }}
       package: backfill-observations
     secrets: inherit
 
@@ -224,7 +224,7 @@ jobs:
             const deployment = await github.rest.repos.createDeployment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: '${{ needs.prepare-release.outputs.merge_sha }}',
+              ref: '${{ needs.prepare-release.outputs.role_tag }}',
               environment: 'prod-github-tempest-cfn-deploy-role',
               transient_environment: false,
               production_environment: true,
@@ -253,7 +253,7 @@ jobs:
       cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-role-policy.yml
     with:
-      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      checkout_ref: ${{ needs.prepare-release.outputs.role_tag }}
     secrets: inherit
 
   complete-deployment-role-policy:
@@ -319,7 +319,7 @@ jobs:
             const deployment = await github.rest.repos.createDeployment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: '${{ needs.prepare-release.outputs.merge_sha }}',
+              ref: '${{ needs.prepare-release.outputs.cloud_tag }}',
               environment: 'prod-cloud-computing',
               transient_environment: false,
               production_environment: true,
@@ -346,7 +346,7 @@ jobs:
     if: always() && needs.create-deployment-cloud.result == 'success'
     uses: ./.github/workflows/reusable-deploy-cloud-computing.yml
     with:
-      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      checkout_ref: ${{ needs.prepare-release.outputs.cloud_tag }}
     secrets: inherit
 
   complete-deployment-cloud:
@@ -392,7 +392,7 @@ jobs:
             const deployment = await github.rest.repos.createDeployment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: '${{ needs.prepare-release.outputs.merge_sha }}',
+              ref: '${{ needs.prepare-release.outputs.store_tag }}',
               environment: 'prod-store-observations',
               transient_environment: false,
               production_environment: true,
@@ -423,7 +423,7 @@ jobs:
       cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-observations.yml
     with:
-      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      checkout_ref: ${{ needs.prepare-release.outputs.store_tag }}
       package_workspace: "@weather/store-observations"
       package_directory: packages/store-observations
       artifact_bucket: tempest-artifacts-store-prod-926898703023
@@ -478,7 +478,7 @@ jobs:
             const deployment = await github.rest.repos.createDeployment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: '${{ needs.prepare-release.outputs.merge_sha }}',
+              ref: '${{ needs.prepare-release.outputs.fetch_tag }}',
               environment: 'prod-fetch-observations',
               transient_environment: false,
               production_environment: true,
@@ -509,7 +509,7 @@ jobs:
       cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-observations.yml
     with:
-      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      checkout_ref: ${{ needs.prepare-release.outputs.fetch_tag }}
       package_workspace: "@weather/fetch-observations"
       package_directory: packages/fetch-observations
       artifact_bucket: tempest-artifacts-fetch-prod-926898703023
@@ -564,7 +564,7 @@ jobs:
             const deployment = await github.rest.repos.createDeployment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: '${{ needs.prepare-release.outputs.merge_sha }}',
+              ref: '${{ needs.prepare-release.outputs.refine_tag }}',
               environment: 'prod-refine-observations',
               transient_environment: false,
               production_environment: true,
@@ -595,7 +595,7 @@ jobs:
       cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-observations.yml
     with:
-      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      checkout_ref: ${{ needs.prepare-release.outputs.refine_tag }}
       package_workspace: "@weather/refine-observations"
       package_directory: packages/refine-observations
       artifact_bucket: tempest-artifacts-refine-prod-926898703023
@@ -650,7 +650,7 @@ jobs:
             const deployment = await github.rest.repos.createDeployment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              ref: '${{ needs.prepare-release.outputs.merge_sha }}',
+              ref: '${{ needs.prepare-release.outputs.backfill_tag }}',
               environment: 'prod-backfill-observations',
               transient_environment: false,
               production_environment: true,
@@ -681,7 +681,7 @@ jobs:
       cancel-in-progress: false
     uses: ./.github/workflows/reusable-deploy-sam-backfill.yml
     with:
-      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+      checkout_ref: ${{ needs.prepare-release.outputs.backfill_tag }}
       artifact_bucket: tempest-artifacts-backfill-prod-926898703023
       stack_name: tempest-weather-backfill-lib
     secrets: inherit
