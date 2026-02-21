@@ -77,7 +77,7 @@ jobs:
         with:
           base_sha: ${{ github.event.pull_request.base.sha }}
           head_sha: ${{ github.event.pull_request.merge_commit_sha }}
-          include_workflow_dependencies: "false"
+          include_workflow_dependencies: "true"
 
       - name: Configure git committer identity
         run: |
