@@ -120,12 +120,11 @@ describe('Database core methods', () => {
   describe('cancelQuery', () => {
     it('should swallow stop query errors', async () => {
       send.mockRejectedValue(new Error('stop failed'));
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const errorSpy = console.error as jest.MockedFunction<typeof console.error>;
       const database = new Database();
 
       await expect(database.cancelQuery('query-123')).resolves.toBeUndefined();
       expect(errorSpy).toHaveBeenCalledWith('Failed to cancel Athena query', expect.objectContaining({ queryExecutionId: 'query-123' }));
-      errorSpy.mockRestore();
     });
   });
 

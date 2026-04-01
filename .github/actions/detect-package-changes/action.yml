@@ -29,6 +29,9 @@ outputs:
   backfill:
     description: Whether backfill-observations package should be considered changed
     value: ${{ steps.detect.outputs.backfill }}
+  dashboard:
+    description: Whether weather-dashboard package should be considered changed
+    value: ${{ steps.detect.outputs.dashboard }}
   deploy_role:
     description: Whether role-policy deployment should be considered changed
     value: ${{ steps.detect.outputs.deploy_role }}
@@ -51,6 +54,7 @@ runs:
         fetch=false
         refine=false
         backfill=false
+        dashboard=false
         deploy_role=false
         shared_all=false
 
@@ -60,6 +64,7 @@ runs:
           fetch=true
           refine=true
           backfill=true
+          dashboard=true
           deploy_role=true
         else
           changed_files="$(git diff --name-only "$base_sha" "$head_sha")"
@@ -101,6 +106,12 @@ runs:
             esac
 
             case "$file" in
+              packages/weather-dashboard/*)
+                dashboard=true
+                ;;
+            esac
+
+            case "$file" in
               infra/github-tempest-cfn-deploy-role/*|.github/workflows/reusable-deploy-role-policy.yml)
                 deploy_role=true
                 ;;
@@ -133,6 +144,12 @@ runs:
                   cloud=true
                   ;;
               esac
+
+              case "$file" in
+                .github/workflows/reusable-deploy-weather-dashboard.yml)
+                  dashboard=true
+                  ;;
+              esac
             fi
           done <<< "$changed_files"
 
@@ -142,6 +159,7 @@ runs:
             fetch=true
             refine=true
             backfill=true
+            dashboard=true
           fi
 
           # cloud-computing is a dependency of observations packages; cloud changes impact dependents.
@@ -157,4 +175,5 @@ runs:
         echo "fetch=$fetch" >> "$GITHUB_OUTPUT"
         echo "refine=$refine" >> "$GITHUB_OUTPUT"
         echo "backfill=$backfill" >> "$GITHUB_OUTPUT"
+        echo "dashboard=$dashboard" >> "$GITHUB_OUTPUT"
         echo "deploy_role=$deploy_role" >> "$GITHUB_OUTPUT"

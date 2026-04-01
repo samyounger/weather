@@ -53,7 +53,7 @@ describe('Database', () => {
 
     it('should return false when query execution throws', async () => {
       const database = new Database();
-      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      const errorSpy = console.error as jest.MockedFunction<typeof console.error>;
       jest.spyOn(database, 'query').mockRejectedValue(new Error('athena unavailable'));
 
       await expect(database.addObservationsPartitions([{ year: '2024', month: '08', day: '05', hour: '22' }])).resolves.toBe(false);
@@ -63,7 +63,6 @@ describe('Database', () => {
           partitions: [{ year: '2024', month: '08', day: '05', hour: '22' }],
         }),
       );
-      errorSpy.mockRestore();
     });
   });
 

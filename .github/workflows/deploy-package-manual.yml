@@ -12,6 +12,7 @@ on:
           - store-observations
           - refine-observations
           - backfill-observations
+          - weather-dashboard
           - cloud-computing
           - github-tempest-cfn-deploy-role
       release_tag:
@@ -39,7 +40,7 @@ jobs:
           set -euo pipefail
 
           case "$PACKAGE" in
-            fetch-observations|store-observations|refine-observations|backfill-observations|cloud-computing|github-tempest-cfn-deploy-role)
+            fetch-observations|store-observations|refine-observations|backfill-observations|weather-dashboard|cloud-computing|github-tempest-cfn-deploy-role)
               expected_prefix="pkg/${PACKAGE}/v"
               ;;
             *)
@@ -124,6 +125,20 @@ jobs:
     uses: ./.github/workflows/reusable-deploy-cloud-computing.yml
     with:
       checkout_ref: ${{ needs.validate-tag.outputs.release_tag }}
+    secrets: inherit
+
+  deploy-dashboard:
+    needs: validate-tag
+    if: inputs.package == 'weather-dashboard' && needs.validate-tag.result == 'success'
+    concurrency:
+      group: deploy-prod-weather-dashboard
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-weather-dashboard.yml
+    with:
+      checkout_ref: ${{ needs.validate-tag.outputs.release_tag }}
+      artifact_bucket: tempest-artifacts-dashboard-prod-926898703023
+      stack_name: tempest-weather-dashboard-lib
+      fetch_stack_name: tempest-weather-fetch-lib
     secrets: inherit
 
   deploy-role-policy:

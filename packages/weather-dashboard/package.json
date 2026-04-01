@@ -1,0 +1,43 @@
+{
+  "name": "@weather/weather-dashboard",
+  "version": "1.0.0",
+  "description": "Private PWA dashboard for Tempest weather observations",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "rimraf ./dist && vite build",
+    "build:prod": "NODE_ENV=production npm run build",
+    "test": "node ../../node_modules/jest/bin/jest.js --passWithNoTests",
+    "test:coverage": "npm run test -- --coverage",
+    "start:dev": "vite",
+    "lint": "eslint .",
+    "lint:fix": "npm run lint -- --fix",
+    "deploy": "npm run build --workspace=@weather/weather-dashboard && sam build --config-env prod && sam deploy --config-env prod && node ./scripts/publish-static-site.mjs",
+    "deploy:cleanup": "sam delete --config-env prod --no-prompts"
+  },
+  "author": "Sam Younger",
+  "license": "ISC",
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.4",
+    "recharts": "^3.3.0"
+  },
+  "devDependencies": {
+    "@types/jest": "*",
+    "@types/node": "*",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@typescript-eslint/eslint-plugin": "*",
+    "@typescript-eslint/parser": "*",
+    "@vitejs/plugin-react": "^5.0.4",
+    "eslint": "*",
+    "jest": "*",
+    "rimraf": "*",
+    "ts-jest": "*",
+    "ts-node": "*",
+    "typescript": "*",
+    "vite": "^7.1.12",
+    "vite-plugin-pwa": "^1.1.0"
+  }
+}

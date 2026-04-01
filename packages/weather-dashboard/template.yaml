@@ -1,0 +1,208 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: Private PWA dashboard and authenticated API for weather observations.
+
+Parameters:
+  FetchObservationsLambdaArn:
+    Type: String
+    Description: ARN of the existing fetch-observations Lambda.
+
+Resources:
+  DashboardAssetBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  DashboardOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-oac"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  DashboardHttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${AWS::StackName}-api"
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+        AllowMethods:
+          - GET
+          - OPTIONS
+        AllowOrigins:
+          - !Sub "https://${DashboardDistribution.DomainName}"
+
+  DashboardCognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${AWS::StackName}-users"
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+      VerificationMessageTemplate:
+        DefaultEmailOption: CONFIRM_WITH_CODE
+
+  DashboardCognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "${AWS::StackName}-web"
+      UserPoolId: !Ref DashboardCognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_USER_SRP_AUTH
+
+  DashboardCognitoUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub "${AWS::StackName}-auth-${AWS::AccountId}"
+      UserPoolId: !Ref DashboardCognitoUserPool
+
+  DashboardHttpApiAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref DashboardHttpApi
+      AuthorizerType: JWT
+      IdentitySource:
+        - $request.header.Authorization
+      JwtConfiguration:
+        Audience:
+          - !Ref DashboardCognitoUserPoolClient
+        Issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${DashboardCognitoUserPool}"
+      Name: dashboard-jwt-authorizer
+
+  DashboardLambdaIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref DashboardHttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Ref FetchObservationsLambdaArn
+      IntegrationMethod: POST
+      PayloadFormatVersion: '2.0'
+
+  DashboardObservationsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DashboardHttpApi
+      RouteKey: GET /observations
+      Target: !Sub "integrations/${DashboardLambdaIntegration}"
+      AuthorizationType: JWT
+      AuthorizerId: !Ref DashboardHttpApiAuthorizer
+
+  DashboardRefinedRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DashboardHttpApi
+      RouteKey: GET /refined
+      Target: !Sub "integrations/${DashboardLambdaIntegration}"
+      AuthorizationType: JWT
+      AuthorizerId: !Ref DashboardHttpApiAuthorizer
+
+  DashboardHttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref DashboardHttpApi
+      AutoDeploy: true
+      StageName: $default
+
+  DashboardApiGatewayInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref FetchObservationsLambdaArn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DashboardHttpApi}/*/*"
+
+  DashboardDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        Origins:
+          - DomainName: !GetAtt DashboardAssetBucket.RegionalDomainName
+            Id: dashboard-assets
+            OriginAccessControlId: !Ref DashboardOriginAccessControl
+            S3OriginConfig: {}
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          TargetOriginId: dashboard-assets
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
+
+  DashboardAssetBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DashboardAssetBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action:
+              - s3:GetObject
+            Resource: !Sub "${DashboardAssetBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${DashboardDistribution}"
+
+Outputs:
+  DashboardAssetBucketName:
+    Value: !Ref DashboardAssetBucket
+  DashboardDistributionId:
+    Value: !Ref DashboardDistribution
+  DashboardDistributionDomainName:
+    Value: !GetAtt DashboardDistribution.DomainName
+  DashboardAppUrl:
+    Value: !Sub "https://${DashboardDistribution.DomainName}"
+  DashboardApiUrl:
+    Value: !Sub "https://${DashboardHttpApi}.execute-api.${AWS::Region}.amazonaws.com"
+  DashboardCognitoRegion:
+    Value: !Ref AWS::Region
+  DashboardCognitoUserPoolId:
+    Value: !Ref DashboardCognitoUserPool
+  DashboardCognitoClientId:
+    Value: !Ref DashboardCognitoUserPoolClient

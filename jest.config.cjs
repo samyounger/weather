@@ -10,7 +10,9 @@ module.exports = {
   setupFiles: [
     "../../test/setup-env-vars.js"
   ],
-  // Silence logs
+  setupFilesAfterEnv: [
+    "../../test/silence-console.js",
+  ],
   silent: false,
   coverageThreshold: {
     global: {

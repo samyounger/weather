@@ -1,0 +1,14 @@
+version = 0.1
+
+[prod.build.parameters]
+cached = true
+parallel = true
+
+[prod.deploy.parameters]
+stack_name = "tempest-weather-dashboard-lib"
+s3_bucket = "tempest-artifacts-dashboard-prod-926898703023"
+s3_prefix = "tempest-weather-dashboard-lib"
+region = "eu-west-2"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false

@@ -23,6 +23,7 @@ The main runtime target is AWS in `eu-west-2`.
 | `packages/fetch-observations` | Public query Lambda exposing raw and refined observation queries over a Lambda Function URL |
 | `packages/refine-observations` | Scheduled refinement Lambda that aggregates raw observations into 15-minute analytical data |
 | `packages/backfill-observations` | Step Functions + Lambda workflow for historical partition and refined-data backfills |
+| `packages/weather-dashboard` | Private React PWA with Cognito auth and API Gateway in front of `fetch-observations` |
 | `packages/cloud-computing` | Shared AWS adapters and utilities used by the other packages |
 | `infra/github-tempest-cfn-deploy-role` | Infrastructure for the GitHub-to-AWS deployment role/policy stack |
 | `.github/workflows` | CI/CD workflows for testing, tagging, and package deployments |
@@ -86,6 +87,16 @@ This package is the shared library for AWS access.
 - `src/utils/partition-date-parts.ts` provides shared UTC partition helpers
 
 The other packages depend on this package for their AWS interactions.
+
+### `@weather/weather-dashboard`
+
+This package is the authenticated frontend entrypoint.
+
+- Hosts a private PWA through S3 and CloudFront
+- Uses Cognito for user authentication
+- Creates an API Gateway HTTP API with JWT authorization
+- Invokes the existing `fetch-observations` Lambda through API Gateway
+- Renders weather charts for the authenticated user on a mobile-friendly dashboard
 
 ## Runtime architecture
 

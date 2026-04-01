@@ -66,6 +66,12 @@ jobs:
               run_workspace_build "@weather/backfill-observations"
               run_workspace_tests "@weather/backfill-observations"
               ;;
+            weather-dashboard)
+              echo "Running build for @weather/weather-dashboard"
+              npm run build --workspace="@weather/weather-dashboard"
+              echo "Running test:coverage for @weather/weather-dashboard"
+              npm run test:coverage --workspace="@weather/weather-dashboard"
+              ;;
             cloud-computing)
               run_workspace_build "@weather/cloud-computing"
               run_workspace_tests "@weather/cloud-computing"

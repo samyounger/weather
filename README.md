@@ -26,6 +26,7 @@ Deployments are tag-driven.
    - `pkg/fetch-observations/vX.Y.Z`
    - `pkg/refine-observations/vX.Y.Z`
    - `pkg/backfill-observations/vX.Y.Z`
+   - `pkg/weather-dashboard/vX.Y.Z`
    - `pkg/cloud-computing/vX.Y.Z`
    - `pkg/github-tempest-cfn-deploy-role/vX.Y.Z` (IAM deploy-role policy stack)
 4. Tag push triggers `.github/workflows/deploy-from-package-tag.yml`.
@@ -39,6 +40,7 @@ Deployments are tag-driven.
 - `.github/workflows/reusable-deploy-sam-observations.yml`
 - `.github/workflows/reusable-deploy-sam-backfill.yml`
 - `.github/workflows/reusable-deploy-cloud-computing.yml`
+- `.github/workflows/reusable-deploy-weather-dashboard.yml`
 - `.github/workflows/reusable-deploy-role-policy.yml`
 
 ### Required GitHub repository variables
@@ -59,6 +61,7 @@ Deployments in CI are tag-driven, but local deploy is still available.
 `$ npm run deploy --workspace=@weather/fetch-observations`
 `$ npm run deploy --workspace=@weather/refine-observations`
 `$ npm run deploy --workspace=@weather/backfill-observations`
+`$ npm run deploy --workspace=@weather/weather-dashboard`
 
 Infrastructure settings such as stack name, region, and artifact bucket are defined in each package's `samconfig.toml`.
 

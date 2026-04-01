@@ -12,13 +12,13 @@ jest.mock('./observations-service');
 jest.mock('@weather/cloud-computing');
 
 describe('DeviceObservationsService', () => {
-  const debugSpy = jest.spyOn(console, 'debug').mockImplementation(() => {});
   const observationsService = new ObservationsService(new Storage(), new DeviceObservationFactory());
   const addObservationsPartitionsMock = jest.fn().mockResolvedValue(true);
   const database = {
     addObservationsPartitions: addObservationsPartitionsMock,
   };
   const service = new DeviceObservationsService(observationsService, database as unknown as Database);
+  const debugSpy = () => console.debug as jest.MockedFunction<typeof console.debug>;
 
   describe('fetchAndInsertReading', () => {
     let subject: {
@@ -33,7 +33,6 @@ describe('DeviceObservationsService', () => {
     beforeEach(async () => {
       addObservationsPartitionsMock.mockReset();
       addObservationsPartitionsMock.mockResolvedValue(true);
-      debugSpy.mockClear();
       const reading = service.fetchAndInsertReading();
       jest.advanceTimersByTime(RESPONSE_DURATION);
       subject = await reading;
@@ -94,7 +93,7 @@ describe('DeviceObservationsService', () => {
         { year: '2040', month: '06', day: '09', hour: '23' },
       ]);
       expect(subject.partitionStatus).toEqual({ succeeded: 2, failed: 0 });
-      expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 2, failed: 0 });
+      expect(debugSpy()).toHaveBeenCalledWith('athena partitions: ', { succeeded: 2, failed: 0 });
     });
 
     it('should only add one partition when multiple observations share the same hour', async () => {
@@ -120,24 +119,24 @@ describe('DeviceObservationsService', () => {
 
     it('should log failed partition counts when batch update is unsuccessful', async () => {
       addObservationsPartitionsMock.mockResolvedValueOnce(false);
-      debugSpy.mockClear();
+      debugSpy().mockClear();
 
       const readingPromise = service.fetchAndInsertReading();
       jest.advanceTimersByTime(RESPONSE_DURATION);
       await readingPromise;
 
-      expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 0, failed: 2 });
+      expect(debugSpy()).toHaveBeenCalledWith('athena partitions: ', { succeeded: 0, failed: 2 });
     });
 
     it('should count failed partitions when batch update throws', async () => {
       addObservationsPartitionsMock.mockRejectedValueOnce(new Error('athena unavailable'));
-      debugSpy.mockClear();
+      debugSpy().mockClear();
 
       const readingPromise = service.fetchAndInsertReading();
       jest.advanceTimersByTime(RESPONSE_DURATION);
       await expect(readingPromise).resolves.toBeDefined();
 
-      expect(debugSpy).toHaveBeenCalledWith('athena partitions: ', { succeeded: 0, failed: 2 });
+      expect(debugSpy()).toHaveBeenCalledWith('athena partitions: ', { succeeded: 0, failed: 2 });
     });
   });
 });
