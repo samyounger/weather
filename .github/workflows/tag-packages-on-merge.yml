@@ -24,12 +24,14 @@ jobs:
       fetch_changed: ${{ steps.changed.outputs.fetch }}
       refine_changed: ${{ steps.changed.outputs.refine }}
       backfill_changed: ${{ steps.changed.outputs.backfill }}
+      dashboard_changed: ${{ steps.changed.outputs.dashboard }}
       role_changed: ${{ steps.changed.outputs.deploy_role }}
       cloud_tag: ${{ steps.tags.outputs.cloud_tag }}
       store_tag: ${{ steps.tags.outputs.store_tag }}
       fetch_tag: ${{ steps.tags.outputs.fetch_tag }}
       refine_tag: ${{ steps.tags.outputs.refine_tag }}
       backfill_tag: ${{ steps.tags.outputs.backfill_tag }}
+      dashboard_tag: ${{ steps.tags.outputs.dashboard_tag }}
       role_tag: ${{ steps.tags.outputs.role_tag }}
     steps:
       - name: Checkout repository
@@ -103,6 +105,7 @@ jobs:
           FETCH_CHANGED: ${{ steps.changed.outputs.fetch }}
           REFINE_CHANGED: ${{ steps.changed.outputs.refine }}
           BACKFILL_CHANGED: ${{ steps.changed.outputs.backfill }}
+          DASHBOARD_CHANGED: ${{ steps.changed.outputs.dashboard }}
           ROLE_CHANGED: ${{ steps.changed.outputs.deploy_role }}
         run: |
           set -euo pipefail
@@ -162,6 +165,7 @@ jobs:
           create_tag_for_package "fetch-observations" "$FETCH_CHANGED" "fetch_tag"
           create_tag_for_package "refine-observations" "$REFINE_CHANGED" "refine_tag"
           create_tag_for_package "backfill-observations" "$BACKFILL_CHANGED" "backfill_tag"
+          create_tag_for_package "weather-dashboard" "$DASHBOARD_CHANGED" "dashboard_tag"
           create_tag_for_package "github-tempest-cfn-deploy-role" "$ROLE_CHANGED" "role_tag"
 
   test-cloud:
@@ -207,6 +211,15 @@ jobs:
     with:
       checkout_ref: ${{ needs.prepare-release.outputs.backfill_tag }}
       package: backfill-observations
+    secrets: inherit
+
+  test-dashboard:
+    needs: prepare-release
+    if: needs.prepare-release.outputs.dashboard_changed == 'true'
+    uses: ./.github/workflows/reusable-run-package-tests.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.dashboard_tag }}
+      package: weather-dashboard
     secrets: inherit
 
   create-deployment-role-policy:
@@ -545,6 +558,93 @@ jobs:
               description
             });
 
+  create-deployment-dashboard:
+    needs:
+      - prepare-release
+      - test-dashboard
+      - policy-gate
+      - deploy-fetch
+    if: always() && needs.prepare-release.outputs.dashboard_changed == 'true' && needs.test-dashboard.result == 'success' && needs.policy-gate.result == 'success' && (needs.prepare-release.outputs.fetch_changed != 'true' || needs.deploy-fetch.result == 'success')
+    runs-on: ubuntu-latest
+    outputs:
+      deployment_id: ${{ steps.create.outputs.deployment_id }}
+    steps:
+      - name: Create GitHub deployment
+        id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const stackUrl = 'https://eu-west-2.console.aws.amazon.com/cloudformation/home?region=eu-west-2#/stacks/stackinfo?stackId=tempest-weather-dashboard-lib';
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: '${{ needs.prepare-release.outputs.dashboard_tag }}',
+              environment: 'prod-weather-dashboard',
+              transient_environment: false,
+              production_environment: true,
+              auto_merge: false,
+              required_contexts: [],
+              description: 'Deploying weather-dashboard'
+            });
+            core.setOutput('deployment_id', String(deployment.data.id));
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: deployment.data.id,
+              state: 'in_progress',
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: stackUrl,
+              description: 'Deployment started'
+            });
+
+  deploy-dashboard:
+    needs:
+      - prepare-release
+      - test-dashboard
+      - policy-gate
+      - deploy-fetch
+      - create-deployment-dashboard
+    if: always() && needs.create-deployment-dashboard.result == 'success'
+    concurrency:
+      group: deploy-prod-weather-dashboard
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-weather-dashboard.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.dashboard_tag }}
+      artifact_bucket: tempest-artifacts-dashboard-prod-926898703023
+      stack_name: tempest-weather-dashboard-lib
+      fetch_stack_name: tempest-weather-fetch-lib
+    secrets: inherit
+
+  complete-deployment-dashboard:
+    needs:
+      - create-deployment-dashboard
+      - deploy-dashboard
+    if: always() && needs.create-deployment-dashboard.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Complete GitHub deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const result = '${{ needs.deploy-dashboard.result }}';
+            const state = result === 'success' ? 'success' : 'failure';
+            const reason = '${{ needs.deploy-dashboard.outputs.failure_reason }}';
+            const shortReason = reason ? reason.slice(0, 120) : '';
+            const description = state === 'success'
+              ? 'Deployment succeeded'
+              : (shortReason ? `Failed: ${shortReason}` : 'Deployment failed. See workflow logs.');
+
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: Number('${{ needs.create-deployment-dashboard.outputs.deployment_id }}'),
+              state,
+              log_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              environment_url: '${{ needs.deploy-dashboard.outputs.stack_url }}' || undefined,
+              description
+            });
+
   create-deployment-refine:
     needs:
       - prepare-release
@@ -723,21 +823,25 @@ jobs:
       - test-fetch
       - test-refine
       - test-backfill
+      - test-dashboard
       - create-deployment-cloud
       - create-deployment-store
       - create-deployment-fetch
+      - create-deployment-dashboard
       - create-deployment-refine
       - create-deployment-backfill
       - create-deployment-role-policy
       - deploy-cloud
       - deploy-store
       - deploy-fetch
+      - deploy-dashboard
       - deploy-refine
       - deploy-backfill
       - deploy-role-policy
       - complete-deployment-cloud
       - complete-deployment-store
       - complete-deployment-fetch
+      - complete-deployment-dashboard
       - complete-deployment-refine
       - complete-deployment-backfill
       - complete-deployment-role-policy
@@ -762,6 +866,7 @@ jobs:
             echo "| fetch-observations | \`${{ needs.prepare-release.outputs.fetch_changed }}\` | \`${{ needs.prepare-release.outputs.fetch_tag }}\` |"
             echo "| refine-observations | \`${{ needs.prepare-release.outputs.refine_changed }}\` | \`${{ needs.prepare-release.outputs.refine_tag }}\` |"
             echo "| backfill-observations | \`${{ needs.prepare-release.outputs.backfill_changed }}\` | \`${{ needs.prepare-release.outputs.backfill_tag }}\` |"
+            echo "| weather-dashboard | \`${{ needs.prepare-release.outputs.dashboard_changed }}\` | \`${{ needs.prepare-release.outputs.dashboard_tag }}\` |"
             echo "| github-tempest-cfn-deploy-role | \`${{ needs.prepare-release.outputs.role_changed }}\` | \`${{ needs.prepare-release.outputs.role_tag }}\` |"
             echo
             echo "### Job Results"
@@ -773,11 +878,13 @@ jobs:
             echo "| test-fetch | \`${{ needs.test-fetch.result }}\` |"
             echo "| test-refine | \`${{ needs.test-refine.result }}\` |"
             echo "| test-backfill | \`${{ needs.test-backfill.result }}\` |"
+            echo "| test-dashboard | \`${{ needs.test-dashboard.result }}\` |"
             echo "| policy-gate | \`${{ needs.policy-gate.result }}\` |"
             echo "| deploy-role-policy | \`${{ needs.deploy-role-policy.result }}\` |"
             echo "| deploy-cloud | \`${{ needs.deploy-cloud.result }}\` |"
             echo "| deploy-store | \`${{ needs.deploy-store.result }}\` |"
             echo "| deploy-fetch | \`${{ needs.deploy-fetch.result }}\` |"
+            echo "| deploy-dashboard | \`${{ needs.deploy-dashboard.result }}\` |"
             echo "| deploy-refine | \`${{ needs.deploy-refine.result }}\` |"
             echo "| deploy-backfill | \`${{ needs.deploy-backfill.result }}\` |"
             echo
@@ -786,6 +893,7 @@ jobs:
             echo "- Role policy: ${{ needs.deploy-role-policy.outputs.stack_url }}"
             echo "- Store: ${{ needs.deploy-store.outputs.stack_url }}"
             echo "- Fetch: ${{ needs.deploy-fetch.outputs.stack_url }}"
+            echo "- Dashboard: ${{ needs.deploy-dashboard.outputs.stack_url }}"
             echo "- Refine: ${{ needs.deploy-refine.outputs.stack_url }}"
             echo "- Backfill: ${{ needs.deploy-backfill.outputs.stack_url }}"
             echo
@@ -794,6 +902,7 @@ jobs:
             echo "- Role policy: ${{ needs.deploy-role-policy.outputs.failure_reason }}"
             echo "- Store: ${{ needs.deploy-store.outputs.failure_reason }}"
             echo "- Fetch: ${{ needs.deploy-fetch.outputs.failure_reason }}"
+            echo "- Dashboard: ${{ needs.deploy-dashboard.outputs.failure_reason }}"
             echo "- Refine: ${{ needs.deploy-refine.outputs.failure_reason }}"
             echo "- Backfill: ${{ needs.deploy-backfill.outputs.failure_reason }}"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,170 @@
+name: Reusable Deploy Weather Dashboard
+
+on:
+  workflow_call:
+    inputs:
+      checkout_ref:
+        required: true
+        type: string
+      artifact_bucket:
+        required: true
+        type: string
+      stack_name:
+        required: true
+        type: string
+      fetch_stack_name:
+        required: true
+        type: string
+    outputs:
+      stack_url:
+        description: CloudFormation stack URL for the deployed stack
+        value: ${{ jobs.deploy.outputs.stack_url }}
+      failure_reason:
+        description: First CloudFormation failure reason if deployment fails
+        value: ${{ jobs.deploy.outputs.failure_reason }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      stack_url: ${{ steps.report.outputs.stack_url }}
+      failure_reason: ${{ steps.report.outputs.failure_reason }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.checkout_ref }}
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+
+      - name: Validate deploy variables are configured
+        run: |
+          if [ -z "${{ vars.AWS_IAM_DEPLOY_ROLE_ARN }}" ]; then
+            echo "Repository variable AWS_IAM_DEPLOY_ROLE_ARN must be set."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_IAM_DEPLOY_ROLE_ARN }}
+          aws-region: eu-west-2
+
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ensure artifact bucket and lifecycle policy
+        env:
+          ARTIFACT_BUCKET: ${{ inputs.artifact_bucket }}
+          AWS_REGION: eu-west-2
+        run: |
+          if ! aws s3api head-bucket --bucket "$ARTIFACT_BUCKET" 2>/dev/null; then
+            aws s3api create-bucket \
+              --bucket "$ARTIFACT_BUCKET" \
+              --region "$AWS_REGION" \
+              --create-bucket-configuration LocationConstraint="$AWS_REGION"
+          fi
+
+          aws s3api put-bucket-lifecycle-configuration \
+            --bucket "$ARTIFACT_BUCKET" \
+            --lifecycle-configuration '{
+              "Rules": [
+                {
+                  "ID": "ExpireSamArtifactsAfter30Days",
+                  "Status": "Enabled",
+                  "Filter": { "Prefix": "" },
+                  "Expiration": { "Days": 30 },
+                  "NoncurrentVersionExpiration": { "NoncurrentDays": 30 }
+                }
+              ]
+            }'
+
+      - name: Resolve fetch-observations Lambda ARN
+        id: fetch-outputs
+        env:
+          FETCH_STACK_NAME: ${{ inputs.fetch_stack_name }}
+          AWS_REGION: eu-west-2
+        run: |
+          fetch_lambda_arn="$(aws cloudformation describe-stacks \
+            --stack-name "$FETCH_STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "Stacks[0].Outputs[?OutputKey=='TempestLambdaArn'].OutputValue | [0]" \
+            --output text)"
+
+          if [ -z "$fetch_lambda_arn" ] || [ "$fetch_lambda_arn" = "None" ]; then
+            echo "Unable to resolve TempestLambdaArn from stack $FETCH_STACK_NAME"
+            exit 1
+          fi
+
+          echo "fetch_lambda_arn=$fetch_lambda_arn" >> "$GITHUB_OUTPUT"
+
+      - name: Build dashboard frontend
+        run: npm run build --workspace=@weather/weather-dashboard
+
+      - name: Build SAM application
+        working-directory: packages/weather-dashboard
+        run: sam build --config-env prod
+
+      - name: Deploy SAM application
+        id: deploy
+        continue-on-error: true
+        working-directory: packages/weather-dashboard
+        env:
+          FETCH_OBSERVATIONS_LAMBDA_ARN: ${{ steps.fetch-outputs.outputs.fetch_lambda_arn }}
+        run: |
+          sam deploy --config-env prod \
+            --parameter-overrides \
+              FetchObservationsLambdaArn=$FETCH_OBSERVATIONS_LAMBDA_ARN
+
+      - name: Publish dashboard static assets
+        if: steps.deploy.outcome == 'success'
+        working-directory: packages/weather-dashboard
+        run: node ./scripts/publish-static-site.mjs
+
+      - name: Capture first CloudFormation failure reason
+        id: failure-reason
+        if: steps.deploy.outcome == 'failure'
+        env:
+          STACK_NAME: ${{ inputs.stack_name }}
+          AWS_REGION: eu-west-2
+        run: |
+          reason="$(aws cloudformation describe-stack-events \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --query "StackEvents[?contains(ResourceStatus, 'FAILED')]|[0].ResourceStatusReason" \
+            --output text 2>/dev/null || true)"
+          if [ -z "$reason" ] || [ "$reason" = "None" ]; then
+            reason="SAM deploy failed. See workflow logs for details."
+          fi
+          echo "failure_reason=$reason" >> "$GITHUB_OUTPUT"
+
+      - name: Publish deployment report outputs
+        id: report
+        if: always()
+        env:
+          STACK_NAME: ${{ inputs.stack_name }}
+          AWS_REGION: eu-west-2
+          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          FAILURE_REASON: ${{ steps.failure-reason.outputs.failure_reason }}
+        run: |
+          stack_url="https://${AWS_REGION}.console.aws.amazon.com/cloudformation/home?region=${AWS_REGION}#/stacks/stackinfo?stackId=${STACK_NAME}"
+          echo "stack_url=$stack_url" >> "$GITHUB_OUTPUT"
+          if [ "$DEPLOY_OUTCOME" = "failure" ]; then
+            echo "failure_reason=$FAILURE_REASON" >> "$GITHUB_OUTPUT"
+          else
+            echo "failure_reason=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fail workflow if deploy failed
+        if: steps.deploy.outcome == 'failure'
+        run: exit 1

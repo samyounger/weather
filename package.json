@@ -9,7 +9,8 @@
     "packages/cloud-computing",
     "packages/fetch-observations",
     "packages/refine-observations",
-    "packages/store-observations"
+    "packages/store-observations",
+    "packages/weather-dashboard"
   ],
   "scripts": {
     "build": "npm run build -ws",

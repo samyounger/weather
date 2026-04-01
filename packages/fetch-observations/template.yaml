@@ -238,25 +238,6 @@ Resources:
             Type: "string"
           - Name: "hour"
             Type: "string"
-  FunctionURLAllowPublicAccess:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunctionUrl
-      FunctionName: !Ref TempestLambdaFunction
-      FunctionUrlAuthType: NONE
-      Principal: "*"
-  FunctionURLInvokeAllowInvokeAction:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !Ref TempestLambdaFunction
-      Principal: "*"
-  LambdaFunctionUrl:
-    Type: AWS::Lambda::Url
-    Properties:
-      AuthType: NONE
-      InvokeMode: BUFFERED
-      TargetFunctionArn: !Ref TempestLambdaFunction
   TempestLambdaErrorsAlarm:
     Type: AWS::CloudWatch::Alarm
     Condition: HasAlertEmail
@@ -318,3 +299,7 @@ Outputs:
   AlertsTopicArn:
     Condition: HasAlertEmail
     Value: !Ref AlertsTopic
+  TempestLambdaArn:
+    Value: !GetAtt TempestLambdaFunction.Arn
+  TempestLambdaName:
+    Value: !Ref TempestLambdaFunction

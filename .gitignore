@@ -7,3 +7,4 @@ bucket-name.txt
 *out.json
 coverage
 .aws-sam
+packages/*/dist
