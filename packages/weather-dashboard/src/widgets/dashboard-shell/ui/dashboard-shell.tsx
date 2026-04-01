@@ -5,7 +5,7 @@ import { WeatherControls } from '../../../features/weather-controls';
 import { LogoutButton } from '../../../features/session-actions';
 import { useAuth } from '../../../app/providers/auth-provider';
 import { useRuntimeConfig } from '../../../app/providers/runtime-config-provider';
-import { getPresetRange } from '../../../shared/lib/date-range.ts';
+import { getPresetRange } from '../../../shared/lib/date-range';
 
 type QueryState = {
   dataset: WeatherDataset;

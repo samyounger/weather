@@ -1,7 +1,7 @@
 function
 .env
 .aws-sam
-lib
+/lib
 bucket-name.txt
 *out.yml
 *out.json
