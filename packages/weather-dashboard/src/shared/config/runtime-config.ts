@@ -3,23 +3,35 @@ export type RuntimeConfig = {
   cognitoRegion: string;
   cognitoUserPoolId: string;
   cognitoClientId: string;
+  mockMode?: boolean;
 };
 
 export const parseRuntimeConfig = (value: unknown): RuntimeConfig => {
   const candidate = value as Partial<RuntimeConfig>;
-  if (
-    !candidate?.apiBaseUrl ||
-    !candidate?.cognitoRegion ||
-    !candidate?.cognitoUserPoolId ||
-    !candidate?.cognitoClientId
-  ) {
-    throw new Error('runtime-config.json is missing required keys');
+  const requiredKeys = ['apiBaseUrl', 'cognitoRegion', 'cognitoUserPoolId', 'cognitoClientId'] as const;
+  const missingKeys = requiredKeys.filter((key) => {
+    const rawValue = candidate?.[key];
+
+    return typeof rawValue !== 'string' || rawValue.trim() === '';
+  });
+
+  if (missingKeys.length > 0) {
+    throw new Error(
+      `runtime-config.json is missing required non-empty string values for: ${missingKeys.join(', ')}. `
+      + 'Expected keys: apiBaseUrl, cognitoRegion, cognitoUserPoolId, cognitoClientId.',
+    );
   }
 
+  const apiBaseUrl = candidate.apiBaseUrl as string;
+  const cognitoRegion = candidate.cognitoRegion as string;
+  const cognitoUserPoolId = candidate.cognitoUserPoolId as string;
+  const cognitoClientId = candidate.cognitoClientId as string;
+
   return {
-    apiBaseUrl: candidate.apiBaseUrl,
-    cognitoRegion: candidate.cognitoRegion,
-    cognitoUserPoolId: candidate.cognitoUserPoolId,
-    cognitoClientId: candidate.cognitoClientId,
+    apiBaseUrl,
+    cognitoRegion,
+    cognitoUserPoolId,
+    cognitoClientId,
+    mockMode: candidate.mockMode === true,
   };
 };

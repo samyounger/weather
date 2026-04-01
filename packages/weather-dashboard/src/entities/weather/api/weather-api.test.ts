@@ -5,6 +5,7 @@ const runtimeConfig = {
   cognitoRegion: 'eu-west-2',
   cognitoUserPoolId: 'eu-west-2_123',
   cognitoClientId: 'client-123',
+  mockMode: false,
 };
 
 const session = {
@@ -97,5 +98,26 @@ describe('weather-api', () => {
     });
 
     expect(response.rows).toEqual([]);
+  });
+
+  it('returns local mock weather data when mock mode is enabled', async () => {
+    const response = await fetchWeatherSeries({
+      ...runtimeConfig,
+      mockMode: true,
+    }, session, {
+      dataset: 'refined',
+      fields: ['period_start', 'airtemperature_avg', 'relativehumidity_avg'],
+      from: new Date('2026-03-01T00:00:00Z'),
+      to: new Date('2026-03-08T00:00:00Z'),
+      limit: 100,
+    });
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(response.rows.length).toBeGreaterThan(1);
+    expect(response.rows[0]).toEqual(expect.objectContaining({
+      period_start: expect.any(String),
+      airtemperature_avg: expect.any(Number),
+      relativehumidity_avg: expect.any(Number),
+    }));
   });
 });

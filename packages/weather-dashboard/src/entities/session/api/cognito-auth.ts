@@ -1,4 +1,5 @@
 import { RuntimeConfig } from '../../../shared/config/runtime-config';
+import { mockConfirmSignUp, mockRefreshTokens, mockSignIn, mockSignUp } from '../../../shared/mocks/mock-dashboard-data';
 import { AuthTokens, AuthUserCredentials, ConfirmSignUpInput, SignUpInput } from '../model/session';
 
 type CognitoAuthenticationResult = {
@@ -51,6 +52,11 @@ const toTokens = (
 });
 
 export const signUp = async (config: RuntimeConfig, input: SignUpInput) => {
+  if (config.mockMode) {
+    await mockSignUp(input);
+    return;
+  }
+
   await executeCognitoAction(config, 'SignUp', {
     ClientId: config.cognitoClientId,
     Username: input.email,
@@ -65,6 +71,11 @@ export const signUp = async (config: RuntimeConfig, input: SignUpInput) => {
 };
 
 export const confirmSignUp = async (config: RuntimeConfig, input: ConfirmSignUpInput) => {
+  if (config.mockMode) {
+    await mockConfirmSignUp(input);
+    return;
+  }
+
   await executeCognitoAction(config, 'ConfirmSignUp', {
     ClientId: config.cognitoClientId,
     Username: input.email,
@@ -73,6 +84,10 @@ export const confirmSignUp = async (config: RuntimeConfig, input: ConfirmSignUpI
 };
 
 export const signIn = async (config: RuntimeConfig, credentials: AuthUserCredentials) => {
+  if (config.mockMode) {
+    return mockSignIn(credentials);
+  }
+
   const response = await executeCognitoAction(config, 'InitiateAuth', {
     ClientId: config.cognitoClientId,
     AuthFlow: 'USER_PASSWORD_AUTH',
@@ -93,6 +108,10 @@ export const refreshTokens = async (
   config: RuntimeConfig,
   refreshToken: string,
 ) => {
+  if (config.mockMode) {
+    return mockRefreshTokens(refreshToken);
+  }
+
   const response = await executeCognitoAction(config, 'InitiateAuth', {
     ClientId: config.cognitoClientId,
     AuthFlow: 'REFRESH_TOKEN_AUTH',

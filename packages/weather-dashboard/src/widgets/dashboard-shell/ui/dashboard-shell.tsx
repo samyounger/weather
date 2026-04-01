@@ -68,7 +68,9 @@ export const DashboardShell = () => {
           <div>
             <h1>Private Weather Dashboard</h1>
             <p className="muted">
-              Authenticated charts for the existing Tempest observation APIs.
+              {config?.mockMode
+                ? 'Viewing local mock weather data for UI iteration.'
+                : 'Authenticated charts for the existing Tempest observation APIs.'}
             </p>
           </div>
           <LogoutButton />

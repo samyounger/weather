@@ -1,6 +1,7 @@
 {
-  "apiBaseUrl": "",
-  "cognitoRegion": "",
-  "cognitoUserPoolId": "",
-  "cognitoClientId": ""
+  "apiBaseUrl": "http://localhost:3000/mock-api",
+  "cognitoRegion": "local-mock-region",
+  "cognitoUserPoolId": "local-mock-user-pool",
+  "cognitoClientId": "local-mock-client",
+  "mockMode": true
 }

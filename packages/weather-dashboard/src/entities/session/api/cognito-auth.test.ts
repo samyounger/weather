@@ -5,6 +5,7 @@ const runtimeConfig = {
   cognitoRegion: 'eu-west-2',
   cognitoUserPoolId: 'eu-west-2_123',
   cognitoClientId: 'client-123',
+  mockMode: false,
 };
 
 describe('cognito-auth', () => {
@@ -118,5 +119,23 @@ describe('cognito-auth', () => {
     });
 
     await expect(signUp(runtimeConfig, { email: 'user@example.com', password: 'password' })).rejects.toThrow('Cognito request failed: SignUp');
+  });
+
+  it('uses local mock auth flows when mock mode is enabled', async () => {
+    const tokens = await signIn({
+      ...runtimeConfig,
+      mockMode: true,
+    }, {
+      email: 'local-user@weather.test',
+      password: 'password',
+    });
+
+    await expect(signUp({ ...runtimeConfig, mockMode: true }, { email: 'local-user@weather.test', password: 'password' })).resolves.toBeUndefined();
+    await expect(confirmSignUp({ ...runtimeConfig, mockMode: true }, { email: 'local-user@weather.test', confirmationCode: '123456' })).resolves.toBeUndefined();
+    await expect(refreshTokens({ ...runtimeConfig, mockMode: true }, 'refresh')).resolves.toEqual(expect.objectContaining({
+      refreshToken: 'refresh',
+    }));
+    expect(tokens.email).toBe('local-user@weather.test');
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

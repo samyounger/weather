@@ -1,4 +1,5 @@
 import { RuntimeConfig } from '../../../shared/config/runtime-config';
+import { mockFetchWeatherSeries } from '../../../shared/mocks/mock-dashboard-data';
 import { AuthTokens } from '../../session/model/session';
 import { WeatherQueryParams, WeatherRow, WeatherSeriesResponse } from '../model/types';
 
@@ -26,6 +27,10 @@ export const fetchWeatherSeries = async (
   session: AuthTokens,
   params: WeatherQueryParams,
 ): Promise<WeatherSeriesResponse> => {
+  if (config.mockMode) {
+    return mockFetchWeatherSeries(params);
+  }
+
   const query = new URLSearchParams({
     from: params.from.toISOString(),
     to: params.to.toISOString(),
