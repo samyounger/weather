@@ -127,8 +127,21 @@ jobs:
       checkout_ref: ${{ needs.validate-tag.outputs.release_tag }}
     secrets: inherit
 
-  deploy-dashboard:
+  deploy-role-policy-for-dashboard:
     needs: validate-tag
+    if: inputs.package == 'weather-dashboard' && needs.validate-tag.result == 'success'
+    concurrency:
+      group: deploy-prod-github-tempest-cfn-deploy-role
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-role-policy.yml
+    with:
+      checkout_ref: refs/heads/main
+    secrets: inherit
+
+  deploy-dashboard:
+    needs:
+      - validate-tag
+      - deploy-role-policy-for-dashboard
     if: inputs.package == 'weather-dashboard' && needs.validate-tag.result == 'success'
     concurrency:
       group: deploy-prod-weather-dashboard
