@@ -48,6 +48,7 @@ Resources:
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-fetch-lib/*
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-refine-lib/*
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-backfill-lib/*
+              - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-dashboard-lib/*
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-github-cfn-deploy-role/*
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/aws-sam-cli-managed-default/*
           - Sid: CloudFormationSamTransform
@@ -150,6 +151,80 @@ Resources:
               - arn:aws:s3:::tempest-artifacts-refine-prod*/*
               - arn:aws:s3:::tempest-artifacts-backfill-prod*
               - arn:aws:s3:::tempest-artifacts-backfill-prod*/*
+              - arn:aws:s3:::tempest-artifacts-dashboard-prod*
+              - arn:aws:s3:::tempest-artifacts-dashboard-prod*/*
+          - Sid: DashboardAssetBucketAccess
+            Effect: Allow
+            Action:
+              - s3:CreateBucket
+              - s3:DeleteBucket
+              - s3:GetBucketLocation
+              - s3:ListBucket
+              - s3:PutBucketPolicy
+              - s3:GetBucketPolicy
+              - s3:DeleteBucketPolicy
+              - s3:PutBucketPublicAccessBlock
+              - s3:GetBucketPublicAccessBlock
+              - s3:PutBucketVersioning
+              - s3:GetBucketVersioning
+              - s3:PutEncryptionConfiguration
+              - s3:GetEncryptionConfiguration
+              - s3:PutObject
+              - s3:GetObject
+              - s3:DeleteObject
+              - s3:AbortMultipartUpload
+              - s3:ListBucketMultipartUploads
+              - s3:ListMultipartUploadParts
+            Resource:
+              - arn:aws:s3:::tempest-weather-dashboard-lib-*
+              - arn:aws:s3:::tempest-weather-dashboard-lib-*/*
+          - Sid: DashboardCloudFrontAccess
+            Effect: Allow
+            Action:
+              - cloudfront:CreateDistribution
+              - cloudfront:GetDistribution
+              - cloudfront:GetDistributionConfig
+              - cloudfront:UpdateDistribution
+              - cloudfront:DeleteDistribution
+              - cloudfront:CreateInvalidation
+              - cloudfront:GetInvalidation
+              - cloudfront:CreateOriginAccessControl
+              - cloudfront:GetOriginAccessControl
+              - cloudfront:UpdateOriginAccessControl
+              - cloudfront:DeleteOriginAccessControl
+              - cloudfront:TagResource
+              - cloudfront:UntagResource
+              - cloudfront:ListTagsForResource
+            Resource: '*'
+          - Sid: DashboardApiGatewayAccess
+            Effect: Allow
+            Action:
+              - apigateway:POST
+              - apigateway:GET
+              - apigateway:PATCH
+              - apigateway:DELETE
+              - apigateway:PUT
+            Resource:
+              - !Sub arn:aws:apigateway:${ArtifactRegion}::/apis
+              - !Sub arn:aws:apigateway:${ArtifactRegion}::/apis/*
+          - Sid: DashboardCognitoAccess
+            Effect: Allow
+            Action:
+              - cognito-idp:CreateUserPool
+              - cognito-idp:DeleteUserPool
+              - cognito-idp:DescribeUserPool
+              - cognito-idp:UpdateUserPool
+              - cognito-idp:CreateUserPoolClient
+              - cognito-idp:DeleteUserPoolClient
+              - cognito-idp:DescribeUserPoolClient
+              - cognito-idp:UpdateUserPoolClient
+              - cognito-idp:CreateUserPoolDomain
+              - cognito-idp:DeleteUserPoolDomain
+              - cognito-idp:DescribeUserPoolDomain
+              - cognito-idp:TagResource
+              - cognito-idp:UntagResource
+              - cognito-idp:ListTagsForResource
+            Resource: '*'
 
   GitHubTempestCfnDeployRoleDeploymentManagedPolicy:
     Type: AWS::IAM::ManagedPolicy
