@@ -4,8 +4,10 @@ import { RefinementQueries } from './refinement-queries';
 
 export type RefinementSummary = {
   date: string;
-  inserted: number;
-  existingRows: number;
+  fifteenMinuteInserted: number;
+  fifteenMinuteExistingRows: number;
+  dailyInserted: number;
+  dailyExistingRows: number;
 };
 
 export class RefinementService {
@@ -22,24 +24,47 @@ export class RefinementService {
     const parts = { year, month, day };
 
     await this.executeQuery(RefinementQueries.createRefinedTable());
+    await this.executeQuery(RefinementQueries.createDailyRefinedTable());
 
-    const existingRows = await this.querySingleNumericResult(RefinementQueries.existingRowsForDate(parts));
-    if (existingRows > 0) {
-      return {
-        date: `${parts.year}-${parts.month}-${parts.day}`,
-        inserted: 0,
-        existingRows,
-      };
-    }
+    const fifteenMinuteExistingRows = await this.querySingleNumericResult(RefinementQueries.existingRowsForDate(parts));
+    const dailyExistingRows = await this.querySingleNumericResult(RefinementQueries.existingDailyRowsForDate(parts));
 
-    await this.executeQuery(RefinementQueries.insertRefinedRowsForDate(parts));
-    const rowsAfterInsert = await this.querySingleNumericResult(RefinementQueries.existingRowsForDate(parts));
+    const fifteenMinuteInserted = await this.insertIfMissing({
+      existingRows: fifteenMinuteExistingRows,
+      insertQuery: RefinementQueries.insertRefinedRowsForDate(parts),
+      countQuery: RefinementQueries.existingRowsForDate(parts),
+    });
+
+    const dailyInserted = await this.insertIfMissing({
+      existingRows: dailyExistingRows,
+      insertQuery: RefinementQueries.insertDailyRefinedRowsForDate(parts),
+      countQuery: RefinementQueries.existingDailyRowsForDate(parts),
+    });
 
     return {
       date: `${parts.year}-${parts.month}-${parts.day}`,
-      inserted: rowsAfterInsert,
-      existingRows,
+      fifteenMinuteInserted,
+      fifteenMinuteExistingRows,
+      dailyInserted,
+      dailyExistingRows,
     };
+  }
+
+  private async insertIfMissing({
+    existingRows,
+    insertQuery,
+    countQuery,
+  }: {
+    existingRows: number;
+    insertQuery: string;
+    countQuery: string;
+  }): Promise<number> {
+    if (existingRows > 0) {
+      return 0;
+    }
+
+    await this.executeQuery(insertQuery);
+    return await this.querySingleNumericResult(countQuery);
   }
 
   private async executeQuery(query: string): Promise<void> {

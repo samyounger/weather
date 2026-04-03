@@ -1,43 +1,9 @@
 import { mockConfirmSignUp, mockFetchWeatherSeries, mockRefreshTokens, mockSignIn, mockSignUp } from './mock-dashboard-data';
 
 describe('mock-dashboard-data', () => {
-  it('creates raw mock weather rows for all supported raw fields', async () => {
+  it('creates series mock weather rows for supported fields', async () => {
     const response = await mockFetchWeatherSeries({
-      dataset: 'raw',
-      fields: [
-        'datetime',
-        'airtemperature',
-        'relativehumidity',
-        'pressure',
-        'windavg',
-        'windgust',
-        'uv',
-        'solarradiation',
-        'rainaccumulation',
-        'custom_metric',
-      ],
-      from: new Date('2026-03-01T00:00:00Z'),
-      to: new Date('2026-03-02T00:00:00Z'),
-      limit: 100,
-    });
-
-    expect(response.rows[0]).toEqual(expect.objectContaining({
-      datetime: expect.any(Number),
-      airtemperature: expect.any(Number),
-      relativehumidity: expect.any(Number),
-      pressure: expect.any(Number),
-      windavg: expect.any(Number),
-      windgust: expect.any(Number),
-      uv: expect.any(Number),
-      solarradiation: expect.any(Number),
-      rainaccumulation: expect.any(Number),
-      custom_metric: expect.any(Number),
-    }));
-  });
-
-  it('creates refined mock weather rows for all supported refined fields', async () => {
-    const response = await mockFetchWeatherSeries({
-      dataset: 'refined',
+      dataset: 'series',
       fields: [
         'period_start',
         'airtemperature_avg',
@@ -48,9 +14,10 @@ describe('mock-dashboard-data', () => {
         'uv_avg',
         'solarradiation_avg',
         'rainaccumulation_sum',
+        'custom_metric',
       ],
       from: new Date('2026-03-01T00:00:00Z'),
-      to: new Date('2026-03-08T00:00:00Z'),
+      to: new Date('2026-03-02T00:00:00Z'),
       limit: 100,
     });
 
@@ -64,6 +31,7 @@ describe('mock-dashboard-data', () => {
       uv_avg: expect.any(Number),
       solarradiation_avg: expect.any(Number),
       rainaccumulation_sum: expect.any(Number),
+      custom_metric: expect.any(Number),
     }));
   });
 

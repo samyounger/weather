@@ -124,6 +124,7 @@ Resources:
           ATHENA_WORKGROUP: !Ref TempestAthenaWorkGroup
           QUERY_TIMEOUT_MS: "25000"
           QUERY_TIMEOUT_SAFETY_BUFFER_MS: "5000"
+          QUERY_REGISTRY_BUCKET: "weather-tempest-records"
   TempestAthenaWorkGroup:
     Type: AWS::Athena::WorkGroup
     Properties:
@@ -237,6 +238,60 @@ Resources:
           - Name: "day"
             Type: "string"
           - Name: "hour"
+            Type: "string"
+  TempestRefinedDailyGlue:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref 'AWS::AccountId'
+      DatabaseName: !Ref TempestDatabase
+      TableInput:
+        Name: "observations_refined_daily"
+        TableType: "EXTERNAL_TABLE"
+        Parameters:
+          EXTERNAL: "TRUE"
+        StorageDescriptor:
+          Columns:
+            - Name: "period_start"
+              Type: "timestamp"
+            - Name: "winddirection_avg"
+              Type: "double"
+            - Name: "windavg_avg"
+              Type: "double"
+            - Name: "windgust_max"
+              Type: "double"
+            - Name: "pressure_avg"
+              Type: "double"
+            - Name: "airtemperature_avg"
+              Type: "double"
+            - Name: "relativehumidity_avg"
+              Type: "double"
+            - Name: "rainaccumulation_sum"
+              Type: "double"
+            - Name: "uv_avg"
+              Type: "double"
+            - Name: "solarradiation_avg"
+              Type: "double"
+            - Name: "sample_count"
+              Type: "bigint"
+          Location: "s3://weather-tempest-records/refined/observations_refined_daily/"
+          InputFormat: "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"
+          OutputFormat: "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"
+          Compressed: true
+          NumberOfBuckets: -1
+          SerdeInfo:
+            SerializationLibrary: "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
+          BucketColumns: [ ]
+          SortColumns: [ ]
+          Parameters: { }
+          SkewedInfo:
+            SkewedColumnNames: [ ]
+            SkewedColumnValues: [ ]
+            SkewedColumnValueLocationMaps: { }
+          StoredAsSubDirectories: false
+        PartitionKeys:
+          - Name: "year"
+            Type: "string"
+          - Name: "month"
             Type: "string"
   TempestLambdaErrorsAlarm:
     Type: AWS::CloudWatch::Alarm

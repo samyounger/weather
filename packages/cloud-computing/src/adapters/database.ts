@@ -26,6 +26,7 @@ export type WaitForQueryOptions = {
   pollIntervalMs?: number;
   maxWaitMs?: number;
   stopWhen?: () => boolean;
+  cancelOnTimeout?: boolean;
 };
 
 type ObservationsPartition = {
@@ -77,19 +78,26 @@ export class Database {
       pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
       maxWaitMs,
       stopWhen,
+      cancelOnTimeout = true,
     }: WaitForQueryOptions = {},
   ): Promise<QueryExecutionState | undefined> {
     const startedAt = Date.now();
 
     for (let queryCount = 0; queryCount <= maxPolls; queryCount += 1) {
       if (stopWhen?.()) {
-        await this.cancelQuery(queryExecutionId);
-        return QueryExecutionState.CANCELLED;
+        if (cancelOnTimeout) {
+          await this.cancelQuery(queryExecutionId);
+          return QueryExecutionState.CANCELLED;
+        }
+        return undefined;
       }
 
       if (maxWaitMs && (Date.now() - startedAt) >= maxWaitMs) {
-        await this.cancelQuery(queryExecutionId);
-        return QueryExecutionState.CANCELLED;
+        if (cancelOnTimeout) {
+          await this.cancelQuery(queryExecutionId);
+          return QueryExecutionState.CANCELLED;
+        }
+        return undefined;
       }
 
       const queryStatus = await this.queryStatus(queryExecutionId);

@@ -18,4 +18,10 @@ describe('getPresetRange', () => {
 
     expect(range.to.getTime() - range.from.getTime()).toBe(72 * 60 * 60 * 1000);
   });
+
+  it('returns a 1 year range', () => {
+    const range = getPresetRange('1y');
+
+    expect(range.to.getUTCFullYear() - range.from.getUTCFullYear()).toBe(1);
+  });
 });

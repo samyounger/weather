@@ -1,8 +1,7 @@
 import { WeatherQueryParams } from './types';
 
 export const buildWeatherQueryParams = (params: WeatherQueryParams) => {
-  const timestampField = params.dataset === 'raw' ? 'datetime' : 'period_start';
-  const fields = [timestampField, ...params.fields];
+  const fields = ['period_start', ...params.fields];
 
   return {
     ...params,

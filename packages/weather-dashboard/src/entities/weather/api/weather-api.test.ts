@@ -1,4 +1,4 @@
-import { fetchWeatherSeries } from './weather-api';
+import { fetchWeatherSeries, WeatherApiError } from './weather-api';
 
 const runtimeConfig = {
   apiBaseUrl: 'https://example.execute-api.eu-west-2.amazonaws.com',
@@ -23,81 +23,100 @@ describe('weather-api', () => {
 
   it('maps API rows into weather objects', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
+      status: 200,
       json: async () => ({
+        aggregationLevel: 'daily',
         data: [
-          [1772323200, '17.2'],
+          ['2026-03-01T00:00:00Z', '17.2'],
         ],
       }),
     });
 
     const response = await fetchWeatherSeries(runtimeConfig, session, {
-      dataset: 'raw',
-      fields: ['datetime', 'airtemperature'],
+      dataset: 'series',
+      fields: ['airtemperature_avg'],
       from: new Date('2026-03-01T00:00:00Z'),
-      to: new Date('2026-03-01T01:00:00Z'),
+      to: new Date('2026-03-02T00:00:00Z'),
       limit: 100,
     });
 
     expect(response.rows).toEqual([
-      { datetime: 1772323200, airtemperature: 17.2 },
+      { period_start: '2026-03-01T00:00:00Z', airtemperature_avg: 17.2 },
     ]);
+    expect(response.aggregationLevel).toBe('daily');
     expect((global.fetch as jest.Mock).mock.calls[0][1].headers.Authorization).toBe('Bearer id-token');
   });
 
-  it('preserves nulls and raw numeric values', async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        data: [
-          ['2026-03-01T00:00:00Z', null, 11],
-        ],
-      }),
-    });
+  it('polls pending async queries until they complete', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        status: 202,
+        json: async () => ({
+          status: 'PENDING',
+          requestKey: 'request-1',
+          aggregationLevel: 'monthly',
+          pollAfterMs: 0,
+          pollUrl: 'https://example.execute-api.eu-west-2.amazonaws.com/series?mode=async&requestKey=request-1',
+        }),
+      })
+      .mockResolvedValueOnce({
+        status: 200,
+        json: async () => ({
+          status: 'SUCCEEDED',
+          aggregationLevel: 'monthly',
+          requestKey: 'request-1',
+          data: [
+            ['2026-03-01T00:00:00Z', '12.4'],
+          ],
+        }),
+      });
 
     const response = await fetchWeatherSeries(runtimeConfig, session, {
-      dataset: 'refined',
-      fields: ['period_start', 'airtemperature_avg', 'sample_count'],
-      from: new Date('2026-03-01T00:00:00Z'),
-      to: new Date('2026-03-01T01:00:00Z'),
+      dataset: 'series',
+      fields: ['airtemperature_avg'],
+      from: new Date('2020-03-01T00:00:00Z'),
+      to: new Date('2026-03-01T00:00:00Z'),
       limit: 100,
     });
 
-    expect(response.rows).toEqual([
-      { period_start: '2026-03-01T00:00:00Z', airtemperature_avg: null, sample_count: 11 },
-    ]);
+    expect(response.aggregationLevel).toBe('monthly');
+    expect((global.fetch as jest.Mock).mock.calls[1][0]).toContain('mode=async&requestKey=request-1');
   });
 
   it('throws a useful error when the API fails', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
-      ok: false,
+      status: 500,
       json: async () => ({ error: 'Unauthorized' }),
     });
 
     await expect(fetchWeatherSeries(runtimeConfig, session, {
-      dataset: 'refined',
-      fields: ['period_start', 'airtemperature_avg'],
+      dataset: 'series',
+      fields: ['airtemperature_avg'],
       from: new Date('2026-03-01T00:00:00Z'),
       to: new Date('2026-03-01T01:00:00Z'),
       limit: 100,
     })).rejects.toThrow('Unauthorized');
   });
 
-  it('handles missing data arrays', async () => {
+  it('exposes the resume link on timeout errors', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
+      status: 500,
+      json: async () => ({
+        error: 'The long-range query failed',
+        pollUrl: '/series?mode=async&requestKey=request-1',
+      }),
     });
 
-    const response = await fetchWeatherSeries(runtimeConfig, session, {
-      dataset: 'refined',
-      fields: ['period_start', 'airtemperature_avg'],
+    await expect(fetchWeatherSeries(runtimeConfig, session, {
+      dataset: 'series',
+      fields: ['airtemperature_avg'],
       from: new Date('2026-03-01T00:00:00Z'),
       to: new Date('2026-03-01T01:00:00Z'),
       limit: 100,
-    });
-
-    expect(response.rows).toEqual([]);
+    })).rejects.toEqual(expect.objectContaining<Partial<WeatherApiError>>({
+      message: 'The long-range query failed',
+      resumeUrl: '/series?mode=async&requestKey=request-1',
+    }));
   });
 
   it('returns local mock weather data when mock mode is enabled', async () => {
@@ -105,8 +124,8 @@ describe('weather-api', () => {
       ...runtimeConfig,
       mockMode: true,
     }, session, {
-      dataset: 'refined',
-      fields: ['period_start', 'airtemperature_avg', 'relativehumidity_avg'],
+      dataset: 'series',
+      fields: ['airtemperature_avg', 'relativehumidity_avg'],
       from: new Date('2026-03-01T00:00:00Z'),
       to: new Date('2026-03-08T00:00:00Z'),
       limit: 100,

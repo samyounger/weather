@@ -10,8 +10,10 @@ jest.mock('./services/refinement-service');
 const mockEvent = {} as APIGatewayProxyEvent;
 const mockRefineForYesterday = jest.fn().mockResolvedValue({
   date: '2026-02-14',
-  inserted: 96,
-  existingRows: 0,
+  fifteenMinuteInserted: 96,
+  fifteenMinuteExistingRows: 0,
+  dailyInserted: 1,
+  dailyExistingRows: 0,
 });
 
 (RefinementService as unknown as jest.Mock).mockImplementation(() => ({
@@ -24,8 +26,10 @@ describe('handler', () => {
   beforeEach(() => {
     mockRefineForYesterday.mockResolvedValue({
       date: '2026-02-14',
-      inserted: 96,
-      existingRows: 0,
+      fifteenMinuteInserted: 96,
+      fifteenMinuteExistingRows: 0,
+      dailyInserted: 1,
+      dailyExistingRows: 0,
     });
   });
 
@@ -49,16 +53,20 @@ describe('handler', () => {
     expect(subject.body).toEqual(JSON.stringify({
       message: 'Observations refined successfully',
       date: '2026-02-14',
-      inserted: 96,
-      existingRows: 0,
+      fifteenMinuteInserted: 96,
+      fifteenMinuteExistingRows: 0,
+      dailyInserted: 1,
+      dailyExistingRows: 0,
     }));
   });
 
   it('should return an already-refined message when no insert is needed', async () => {
     mockRefineForYesterday.mockResolvedValueOnce({
       date: '2026-02-14',
-      inserted: 0,
-      existingRows: 96,
+      fifteenMinuteInserted: 0,
+      fifteenMinuteExistingRows: 96,
+      dailyInserted: 0,
+      dailyExistingRows: 1,
     });
 
     await invokeHandler();
@@ -67,8 +75,10 @@ describe('handler', () => {
     expect(subject.body).toEqual(JSON.stringify({
       message: 'Observations were already refined for target date',
       date: '2026-02-14',
-      inserted: 0,
-      existingRows: 96,
+      fifteenMinuteInserted: 0,
+      fifteenMinuteExistingRows: 96,
+      dailyInserted: 0,
+      dailyExistingRows: 1,
     }));
   });
 });

@@ -21,12 +21,14 @@ export const handler = async (_event: APIGatewayProxyEvent): Promise<APIGatewayP
     return {
       statusCode: 200,
       body: JSON.stringify({
-        message: refinementSummary.inserted > 0
+        message: refinementSummary.fifteenMinuteInserted > 0 || refinementSummary.dailyInserted > 0
           ? 'Observations refined successfully'
           : 'Observations were already refined for target date',
         date: refinementSummary.date,
-        inserted: refinementSummary.inserted,
-        existingRows: refinementSummary.existingRows,
+        fifteenMinuteInserted: refinementSummary.fifteenMinuteInserted,
+        fifteenMinuteExistingRows: refinementSummary.fifteenMinuteExistingRows,
+        dailyInserted: refinementSummary.dailyInserted,
+        dailyExistingRows: refinementSummary.dailyExistingRows,
       }),
     };
   } catch (error) {
