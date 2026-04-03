@@ -30,6 +30,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: prod-weather-dashboard
     outputs:
       stack_url: ${{ steps.report.outputs.stack_url }}
       failure_reason: ${{ steps.report.outputs.failure_reason }}
@@ -48,6 +49,18 @@ jobs:
         run: |
           if [ -z "${{ vars.AWS_IAM_DEPLOY_ROLE_ARN }}" ]; then
             echo "Repository variable AWS_IAM_DEPLOY_ROLE_ARN must be set."
+            exit 1
+          fi
+          if [ -z "${{ vars.WEATHER_DASHBOARD_DOMAIN_NAME }}" ]; then
+            echo "Environment variable WEATHER_DASHBOARD_DOMAIN_NAME must be set."
+            exit 1
+          fi
+          if [ -z "${{ vars.WEATHER_DASHBOARD_HOSTED_ZONE_ID }}" ]; then
+            echo "Environment variable WEATHER_DASHBOARD_HOSTED_ZONE_ID must be set."
+            exit 1
+          fi
+          if [ -z "${{ vars.WEATHER_DASHBOARD_CERTIFICATE_ARN }}" ]; then
+            echo "Environment variable WEATHER_DASHBOARD_CERTIFICATE_ARN must be set."
             exit 1
           fi
 
@@ -121,10 +134,16 @@ jobs:
         working-directory: packages/weather-dashboard
         env:
           FETCH_OBSERVATIONS_LAMBDA_ARN: ${{ steps.fetch-outputs.outputs.fetch_lambda_arn }}
+          DASHBOARD_DOMAIN_NAME: ${{ vars.WEATHER_DASHBOARD_DOMAIN_NAME }}
+          DASHBOARD_HOSTED_ZONE_ID: ${{ vars.WEATHER_DASHBOARD_HOSTED_ZONE_ID }}
+          DASHBOARD_CERTIFICATE_ARN: ${{ vars.WEATHER_DASHBOARD_CERTIFICATE_ARN }}
         run: |
           sam deploy --config-env prod \
             --parameter-overrides \
-              FetchObservationsLambdaArn=$FETCH_OBSERVATIONS_LAMBDA_ARN
+              FetchObservationsLambdaArn=$FETCH_OBSERVATIONS_LAMBDA_ARN \
+              DashboardDomainName=$DASHBOARD_DOMAIN_NAME \
+              DashboardHostedZoneId=$DASHBOARD_HOSTED_ZONE_ID \
+              DashboardCertificateArn=$DASHBOARD_CERTIFICATE_ARN
 
       - name: Publish dashboard static assets
         if: steps.deploy.outcome == 'success'

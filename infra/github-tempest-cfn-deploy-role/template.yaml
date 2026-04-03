@@ -227,6 +227,21 @@ Resources:
               - cognito-idp:UntagResource
               - cognito-idp:ListTagsForResource
             Resource: '*'
+          - Sid: DashboardRoute53ListAccess
+            Effect: Allow
+            Action:
+              - route53:ListHostedZonesByName
+            Resource: '*'
+          - Sid: DashboardRoute53Access
+            Effect: Allow
+            Action:
+              - route53:ChangeResourceRecordSets
+              - route53:GetChange
+              - route53:GetHostedZone
+              - route53:ListResourceRecordSets
+            Resource:
+              - !Sub arn:aws:route53:::hostedzone/Z09668782KXUNWOMT1IDW
+              - !Sub arn:aws:route53:::change/*
 
   GitHubTempestCfnDeployRoleDeploymentManagedPolicy:
     Type: AWS::IAM::ManagedPolicy
