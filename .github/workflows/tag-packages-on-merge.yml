@@ -558,13 +558,27 @@ jobs:
               description
             });
 
+  deploy-role-policy-for-dashboard:
+    needs:
+      - prepare-release
+      - test-dashboard
+      - deploy-fetch
+    if: always() && needs.prepare-release.outputs.dashboard_changed == 'true' && needs.test-dashboard.result == 'success' && (needs.prepare-release.outputs.fetch_changed != 'true' || needs.deploy-fetch.result == 'success')
+    concurrency:
+      group: deploy-prod-github-tempest-cfn-deploy-role
+      cancel-in-progress: false
+    uses: ./.github/workflows/reusable-deploy-role-policy.yml
+    with:
+      checkout_ref: ${{ needs.prepare-release.outputs.merge_sha }}
+    secrets: inherit
+
   create-deployment-dashboard:
     needs:
       - prepare-release
       - test-dashboard
-      - policy-gate
       - deploy-fetch
-    if: always() && needs.prepare-release.outputs.dashboard_changed == 'true' && needs.test-dashboard.result == 'success' && needs.policy-gate.result == 'success' && (needs.prepare-release.outputs.fetch_changed != 'true' || needs.deploy-fetch.result == 'success')
+      - deploy-role-policy-for-dashboard
+    if: always() && needs.prepare-release.outputs.dashboard_changed == 'true' && needs.test-dashboard.result == 'success' && needs.deploy-role-policy-for-dashboard.result == 'success' && (needs.prepare-release.outputs.fetch_changed != 'true' || needs.deploy-fetch.result == 'success')
     runs-on: ubuntu-latest
     outputs:
       deployment_id: ${{ steps.create.outputs.deployment_id }}
@@ -601,8 +615,8 @@ jobs:
     needs:
       - prepare-release
       - test-dashboard
-      - policy-gate
       - deploy-fetch
+      - deploy-role-policy-for-dashboard
       - create-deployment-dashboard
     if: always() && needs.create-deployment-dashboard.result == 'success'
     concurrency:
@@ -834,6 +848,7 @@ jobs:
       - deploy-cloud
       - deploy-store
       - deploy-fetch
+      - deploy-role-policy-for-dashboard
       - deploy-dashboard
       - deploy-refine
       - deploy-backfill
