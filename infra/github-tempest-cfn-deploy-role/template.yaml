@@ -347,6 +347,8 @@ Resources:
               - dynamodb:CreateTable
               - dynamodb:DeleteTable
               - dynamodb:DescribeTable
+              - dynamodb:DescribeTimeToLive
+              - dynamodb:UpdateTimeToLive
               - dynamodb:UpdateTable
               - dynamodb:TagResource
               - dynamodb:UntagResource
