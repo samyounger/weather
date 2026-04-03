@@ -2,6 +2,10 @@
 
 A weather application that queries the tempest wx weather API.
 
+Architecture reference:
+
+- [ARCHITECTURE.md](/Users/samyounger/development/weather/ARCHITECTURE.md)
+
 ## Installation instructions
 
 ```sh

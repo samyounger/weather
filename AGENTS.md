@@ -5,6 +5,10 @@
 This repository runs a weather data pipeline built around AWS Lambda, Athena, and S3.
 It ingests Tempest weather observations, stores raw partitioned data, exposes query APIs, and builds refined datasets for analytics.
 
+Architecture reference:
+
+- `ARCHITECTURE.md`
+
 ## High-Level Flow
 
 1. `store-observations` fetches Tempest readings and writes raw JSON to S3 (`year/month/day/hour` partitions).
