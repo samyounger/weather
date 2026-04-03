@@ -7,6 +7,8 @@ import {
 } from '@aws-sdk/client-athena';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
+type RefinedGranularity = '15m' | 'daily';
+
 type WorkerInput = {
   bucket: string;
   chunkKey: string;
@@ -14,6 +16,7 @@ type WorkerInput = {
   rawTable?: string;
   refinedTable?: string;
   refinedLocation?: string;
+  refinedGranularity?: RefinedGranularity;
   outputLocation?: string;
   workGroup?: string;
 };
@@ -33,6 +36,7 @@ const DEFAULT_DATABASE = process.env.BACKFILL_ATHENA_DATABASE || 'tempest_weathe
 const DEFAULT_RAW_TABLE = process.env.BACKFILL_REFINED_RAW_TABLE || 'observations';
 const DEFAULT_REFINED_TABLE = process.env.BACKFILL_REFINED_TABLE || 'observations_refined_15m';
 const DEFAULT_REFINED_LOCATION = process.env.BACKFILL_REFINED_LOCATION || 's3://weather-tempest-records/refined/observations_refined_15m/';
+const DEFAULT_REFINED_GRANULARITY: RefinedGranularity = process.env.BACKFILL_REFINED_GRANULARITY === 'daily' ? 'daily' : '15m';
 const DEFAULT_OUTPUT_LOCATION = process.env.BACKFILL_ATHENA_OUTPUT || 's3://weather-tempest-records/queries/';
 const DEFAULT_WORK_GROUP = process.env.BACKFILL_ATHENA_WORKGROUP || 'primary';
 const POLL_DELAY_MS = Number(process.env.BACKFILL_POLL_DELAY_MS || '2000');
@@ -155,89 +159,6 @@ const querySingleNumericResult = async (
   return readFirstNumericCell(results);
 };
 
-const createRefinedTableQuery = (refinedTable: string, refinedLocation: string): string => {
-  return `
-    CREATE EXTERNAL TABLE IF NOT EXISTS ${refinedTable} (
-      period_start timestamp,
-      winddirection_avg double,
-      windavg_avg double,
-      windgust_max double,
-      pressure_avg double,
-      airtemperature_avg double,
-      relativehumidity_avg double,
-      rainaccumulation_sum double,
-      uv_avg double,
-      solarradiation_avg double,
-      sample_count bigint
-    )
-    PARTITIONED BY (
-      year string,
-      month string,
-      day string,
-      hour string
-    )
-    STORED AS PARQUET
-    LOCATION '${refinedLocation}'
-    TBLPROPERTIES (
-      'parquet.compress'='SNAPPY'
-    )`;
-};
-
-const existingRowsForDateQuery = (refinedTable: string, year: string, month: string, day: string): string => {
-  return `
-    SELECT CAST(COUNT(1) AS BIGINT) AS refined_rows
-    FROM ${refinedTable}
-    WHERE year='${year}'
-    AND month='${month}'
-    AND day='${day}'`;
-};
-
-const insertRefinedRowsForDateQuery = (
-  rawTable: string,
-  refinedTable: string,
-  year: string,
-  month: string,
-  day: string,
-): string => {
-  return `
-    INSERT INTO ${refinedTable}
-    SELECT
-      period_start,
-      AVG(winddirection) AS winddirection_avg,
-      AVG(windavg) AS windavg_avg,
-      MAX(windgust) AS windgust_max,
-      AVG(pressure) AS pressure_avg,
-      AVG(airtemperature) AS airtemperature_avg,
-      AVG(relativehumidity) AS relativehumidity_avg,
-      SUM(rainaccumulation) AS rainaccumulation_sum,
-      AVG(uv) AS uv_avg,
-      AVG(solarradiation) AS solarradiation_avg,
-      CAST(COUNT(1) AS BIGINT) AS sample_count,
-      DATE_FORMAT(period_start, '%Y') AS year,
-      DATE_FORMAT(period_start, '%m') AS month,
-      DATE_FORMAT(period_start, '%d') AS day,
-      DATE_FORMAT(period_start, '%H') AS hour
-    FROM (
-      SELECT
-        DATE_TRUNC('hour', FROM_UNIXTIME(datetime))
-          + INTERVAL '15' MINUTE * CAST(FLOOR(MINUTE(FROM_UNIXTIME(datetime)) / 15) AS INTEGER) AS period_start,
-        winddirection,
-        windavg,
-        windgust,
-        pressure,
-        airtemperature,
-        relativehumidity,
-        rainaccumulation,
-        uv,
-        solarradiation
-      FROM ${rawTable}
-      WHERE year='${year}'
-      AND month='${month}'
-      AND day='${day}'
-    ) source
-    GROUP BY period_start`;
-};
-
 const parseDateParts = (date: string): { year: string; month: string; day: string } => {
   const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) {
@@ -249,17 +170,209 @@ const parseDateParts = (date: string): { year: string; month: string; day: strin
   return { year, month, day };
 };
 
+const dateLiteral = (year: string, month: string, day: string) => `${year}-${month}-${day}`;
+
+const createRefined15mTableQuery = (refinedTable: string, refinedLocation: string): string => `
+  CREATE EXTERNAL TABLE IF NOT EXISTS ${refinedTable} (
+    period_start timestamp,
+    winddirection_avg double,
+    windavg_avg double,
+    windgust_max double,
+    pressure_avg double,
+    airtemperature_avg double,
+    relativehumidity_avg double,
+    rainaccumulation_sum double,
+    uv_avg double,
+    solarradiation_avg double,
+    sample_count bigint
+  )
+  PARTITIONED BY (
+    year string,
+    month string,
+    day string,
+    hour string
+  )
+  STORED AS PARQUET
+  LOCATION '${refinedLocation}'
+  TBLPROPERTIES (
+    'parquet.compress'='SNAPPY'
+  )`;
+
+const createRefinedDailyTableQuery = (refinedTable: string, refinedLocation: string): string => `
+  CREATE EXTERNAL TABLE IF NOT EXISTS ${refinedTable} (
+    period_start timestamp,
+    winddirection_avg double,
+    windavg_avg double,
+    windgust_max double,
+    pressure_avg double,
+    airtemperature_avg double,
+    relativehumidity_avg double,
+    rainaccumulation_sum double,
+    uv_avg double,
+    solarradiation_avg double,
+    sample_count bigint
+  )
+  PARTITIONED BY (
+    year string,
+    month string
+  )
+  STORED AS PARQUET
+  LOCATION '${refinedLocation}'
+  TBLPROPERTIES (
+    'parquet.compress'='SNAPPY'
+  )`;
+
+const existing15mRowsForDateQuery = (refinedTable: string, year: string, month: string, day: string): string => `
+  SELECT CAST(COUNT(1) AS BIGINT) AS refined_rows
+  FROM ${refinedTable}
+  WHERE year='${year}'
+  AND month='${month}'
+  AND day='${day}'`;
+
+const existingDailyRowsForDateQuery = (refinedTable: string, year: string, month: string, day: string): string => `
+  SELECT CAST(COUNT(1) AS BIGINT) AS refined_rows
+  FROM ${refinedTable}
+  WHERE year='${year}'
+  AND month='${month}'
+  AND CAST(period_start AS DATE) = DATE '${dateLiteral(year, month, day)}'`;
+
+const insert15mRowsForDateQuery = (
+  rawTable: string,
+  refinedTable: string,
+  year: string,
+  month: string,
+  day: string,
+): string => `
+  INSERT INTO ${refinedTable}
+  SELECT
+    period_start,
+    AVG(winddirection) AS winddirection_avg,
+    AVG(windavg) AS windavg_avg,
+    MAX(windgust) AS windgust_max,
+    AVG(pressure) AS pressure_avg,
+    AVG(airtemperature) AS airtemperature_avg,
+    AVG(relativehumidity) AS relativehumidity_avg,
+    SUM(rainaccumulation) AS rainaccumulation_sum,
+    AVG(uv) AS uv_avg,
+    AVG(solarradiation) AS solarradiation_avg,
+    CAST(COUNT(1) AS BIGINT) AS sample_count,
+    DATE_FORMAT(period_start, '%Y') AS year,
+    DATE_FORMAT(period_start, '%m') AS month,
+    DATE_FORMAT(period_start, '%d') AS day,
+    DATE_FORMAT(period_start, '%H') AS hour
+  FROM (
+    SELECT
+      DATE_TRUNC('hour', FROM_UNIXTIME(datetime))
+        + INTERVAL '15' MINUTE * CAST(FLOOR(MINUTE(FROM_UNIXTIME(datetime)) / 15) AS INTEGER) AS period_start,
+      winddirection,
+      windavg,
+      windgust,
+      pressure,
+      airtemperature,
+      relativehumidity,
+      rainaccumulation,
+      uv,
+      solarradiation
+    FROM ${rawTable}
+    WHERE year='${year}'
+    AND month='${month}'
+    AND day='${day}'
+  ) source
+  GROUP BY period_start`;
+
+const insertDailyRowsForDateQuery = (
+  rawTable: string,
+  refinedTable: string,
+  year: string,
+  month: string,
+  day: string,
+): string => `
+  INSERT INTO ${refinedTable}
+  SELECT
+    period_start,
+    AVG(winddirection) AS winddirection_avg,
+    AVG(windavg) AS windavg_avg,
+    MAX(windgust) AS windgust_max,
+    AVG(pressure) AS pressure_avg,
+    AVG(airtemperature) AS airtemperature_avg,
+    AVG(relativehumidity) AS relativehumidity_avg,
+    SUM(rainaccumulation) AS rainaccumulation_sum,
+    AVG(uv) AS uv_avg,
+    AVG(solarradiation) AS solarradiation_avg,
+    CAST(COUNT(1) AS BIGINT) AS sample_count,
+    DATE_FORMAT(period_start, '%Y') AS year,
+    DATE_FORMAT(period_start, '%m') AS month
+  FROM (
+    SELECT
+      DATE_TRUNC('day', FROM_UNIXTIME(datetime)) AS period_start,
+      winddirection,
+      windavg,
+      windgust,
+      pressure,
+      airtemperature,
+      relativehumidity,
+      rainaccumulation,
+      uv,
+      solarradiation
+    FROM ${rawTable}
+    WHERE year='${year}'
+    AND month='${month}'
+    AND day='${day}'
+  ) source
+  GROUP BY period_start`;
+
+const createRefinedTableQuery = (
+  refinedGranularity: RefinedGranularity,
+  refinedTable: string,
+  refinedLocation: string,
+) => (
+  refinedGranularity === 'daily'
+    ? createRefinedDailyTableQuery(refinedTable, refinedLocation)
+    : createRefined15mTableQuery(refinedTable, refinedLocation)
+);
+
+const existingRowsForDateQuery = (
+  refinedGranularity: RefinedGranularity,
+  refinedTable: string,
+  year: string,
+  month: string,
+  day: string,
+) => (
+  refinedGranularity === 'daily'
+    ? existingDailyRowsForDateQuery(refinedTable, year, month, day)
+    : existing15mRowsForDateQuery(refinedTable, year, month, day)
+);
+
+const insertRowsForDateQuery = (
+  refinedGranularity: RefinedGranularity,
+  rawTable: string,
+  refinedTable: string,
+  year: string,
+  month: string,
+  day: string,
+) => (
+  refinedGranularity === 'daily'
+    ? insertDailyRowsForDateQuery(rawTable, refinedTable, year, month, day)
+    : insert15mRowsForDateQuery(rawTable, refinedTable, year, month, day)
+);
+
 export const handler = async (event: WorkerInput): Promise<WorkerOutput> => {
   const database = event.database || DEFAULT_DATABASE;
   const rawTable = event.rawTable || DEFAULT_RAW_TABLE;
   const refinedTable = event.refinedTable || DEFAULT_REFINED_TABLE;
   const refinedLocation = event.refinedLocation || DEFAULT_REFINED_LOCATION;
+  const refinedGranularity = event.refinedGranularity || DEFAULT_REFINED_GRANULARITY;
   const outputLocation = event.outputLocation || DEFAULT_OUTPUT_LOCATION;
   const workGroup = event.workGroup || DEFAULT_WORK_GROUP;
 
   const dates = await loadChunk(event.bucket, event.chunkKey);
 
-  await executeQuery(createRefinedTableQuery(refinedTable, refinedLocation), database, outputLocation, workGroup);
+  await executeQuery(
+    createRefinedTableQuery(refinedGranularity, refinedTable, refinedLocation),
+    database,
+    outputLocation,
+    workGroup,
+  );
 
   let succeededDates = 0;
   let skippedDates = 0;
@@ -269,7 +382,7 @@ export const handler = async (event: WorkerInput): Promise<WorkerOutput> => {
     const { year, month, day } = parseDateParts(date);
 
     const existingRows = await querySingleNumericResult(
-      existingRowsForDateQuery(refinedTable, year, month, day),
+      existingRowsForDateQuery(refinedGranularity, refinedTable, year, month, day),
       database,
       outputLocation,
       workGroup,
@@ -281,14 +394,14 @@ export const handler = async (event: WorkerInput): Promise<WorkerOutput> => {
     }
 
     await executeQuery(
-      insertRefinedRowsForDateQuery(rawTable, refinedTable, year, month, day),
+      insertRowsForDateQuery(refinedGranularity, rawTable, refinedTable, year, month, day),
       database,
       outputLocation,
       workGroup,
     );
 
     const rowsAfterInsert = await querySingleNumericResult(
-      existingRowsForDateQuery(refinedTable, year, month, day),
+      existingRowsForDateQuery(refinedGranularity, refinedTable, year, month, day),
       database,
       outputLocation,
       workGroup,

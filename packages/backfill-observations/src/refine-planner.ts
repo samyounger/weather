@@ -11,6 +11,7 @@ type PlannerInput = {
   rawTable?: string;
   refinedTable?: string;
   refinedLocation?: string;
+  refinedGranularity?: '15m' | 'daily';
   outputLocation?: string;
   workGroup?: string;
 };
@@ -29,6 +30,7 @@ type PlannerOutput = {
   rawTable: string;
   refinedTable: string;
   refinedLocation: string;
+  refinedGranularity: '15m' | 'daily';
   outputLocation: string;
   workGroup: string;
 };
@@ -41,6 +43,7 @@ const DEFAULT_DATABASE = process.env.BACKFILL_ATHENA_DATABASE || 'tempest_weathe
 const DEFAULT_RAW_TABLE = process.env.BACKFILL_REFINED_RAW_TABLE || 'observations';
 const DEFAULT_REFINED_TABLE = process.env.BACKFILL_REFINED_TABLE || 'observations_refined_15m';
 const DEFAULT_REFINED_LOCATION = process.env.BACKFILL_REFINED_LOCATION || 's3://weather-tempest-records/refined/observations_refined_15m/';
+const DEFAULT_REFINED_GRANULARITY = process.env.BACKFILL_REFINED_GRANULARITY === 'daily' ? 'daily' : '15m';
 const DEFAULT_OUTPUT_LOCATION = process.env.BACKFILL_ATHENA_OUTPUT || 's3://weather-tempest-records/queries/';
 const DEFAULT_WORK_GROUP = process.env.BACKFILL_ATHENA_WORKGROUP || 'primary';
 
@@ -129,6 +132,7 @@ export const handler = async (event: PlannerInput = {}): Promise<PlannerOutput> 
   const rawTable = event.rawTable || DEFAULT_RAW_TABLE;
   const refinedTable = event.refinedTable || DEFAULT_REFINED_TABLE;
   const refinedLocation = event.refinedLocation || DEFAULT_REFINED_LOCATION;
+  const refinedGranularity = event.refinedGranularity || DEFAULT_REFINED_GRANULARITY;
   const outputLocation = event.outputLocation || DEFAULT_OUTPUT_LOCATION;
   const workGroup = event.workGroup || DEFAULT_WORK_GROUP;
 
@@ -169,6 +173,7 @@ export const handler = async (event: PlannerInput = {}): Promise<PlannerOutput> 
     rawTable,
     refinedTable,
     refinedLocation,
+    refinedGranularity,
     outputLocation,
     workGroup,
   };
