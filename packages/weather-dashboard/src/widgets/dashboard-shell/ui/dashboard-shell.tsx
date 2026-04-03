@@ -64,7 +64,7 @@ export const DashboardShell = () => {
   return (
     <div className="page-layout">
       <section className="app-card hero">
-        <div className="button-row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="hero-actions">
           <div>
             <h1>Private Weather Dashboard</h1>
             <p className="muted">
@@ -101,7 +101,7 @@ export const DashboardShell = () => {
           <div className={`status-banner${error ? ' error-banner' : ''}`}>
             {error ?? status}
           </div>
-          <div style={{ width: '100%', height: 340, marginTop: 20 }}>
+          <div className="chart-container">
             <ResponsiveContainer>
               <LineChart data={chartRows}>
                 <CartesianGrid strokeDasharray="4 4" stroke="#cbd8df" />
