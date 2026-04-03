@@ -1,4 +1,4 @@
-import { GetObjectCommand, NoSuchKey, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, GetObjectCommandOutput, NoSuchKey, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 
 export type QueryRegistryStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 
@@ -18,7 +18,7 @@ export type QueryRegistryRecord = {
 const REGION = 'eu-west-2';
 const REGISTRY_PREFIX = 'query-registry';
 
-const toBodyString = async (body: NonNullable<Awaited<ReturnType<S3Client['send']>>['Body']>) => {
+const toBodyString = async (body: NonNullable<GetObjectCommandOutput['Body']>) => {
   if (typeof body.transformToString === 'function') {
     return await body.transformToString();
   }
