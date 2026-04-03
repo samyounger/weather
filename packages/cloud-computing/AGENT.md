@@ -21,6 +21,8 @@ Consumed by:
 - `@weather/fetch-observations`
 - `@weather/refine-observations`
 
+The long-range query path now relies on this package primarily for Athena query execution, while `fetch-observations` manages its query-registry state separately in DynamoDB.
+
 ## Commands
 
 Run from repo root or package directory:

@@ -2,6 +2,10 @@
 
 A weather application that queries the tempest wx weather API.
 
+Architecture reference:
+
+- [ARCHITECTURE.md](/Users/samyounger/development/weather/ARCHITECTURE.md)
+
 ## Installation instructions
 
 ```sh
@@ -65,59 +69,82 @@ Deployments in CI are tag-driven, but local deploy is still available.
 
 Infrastructure settings such as stack name, region, and artifact bucket are defined in each package's `samconfig.toml`.
 
-## Refine Observations Logic
+## Query architecture
 
-`refine-observations` is a scheduled Lambda that transforms high-frequency raw observations into lower-frequency analytical data for Athena.
+The repository supports both short-range inspection and long-range trend analysis without changing the frontend contract.
 
-### Why this exists
-- Raw observations are written as many small JSON objects under partitioned S3 paths.
-- Athena queries over longer date ranges become slow and expensive when scanning the raw dataset.
-- Refinement reduces row volume and stores query-friendly parquet data.
+```mermaid
+flowchart LR
+  A[store-observations] --> B[Raw observations in S3]
+  B --> C[Glue table: observations]
+  C --> D[refine-observations]
+  D --> E[observations_refined_15m]
+  D --> F[observations_refined_daily]
+  G[weather-dashboard] --> H[fetch-observations /series]
+  H --> I[DynamoDB query registry]
+  H --> J[Athena]
+  J --> C
+  J --> E
+  J --> F
+```
+
+### Resolution strategy
+
+`fetch-observations` now routes dashboard trend requests automatically:
+
+- short windows -> `observations_refined_15m`
+- medium and long windows -> `observations_refined_daily`
+- very long views -> monthly aggregation over daily rollups
+
+This keeps Athena scan sizes low while still returning usable multi-year trend lines.
+
+### Async long-range query behavior
+
+The `/series` endpoint waits up to 5 seconds for Athena to finish.
+
+If Athena does not complete in that window:
+
+- the API returns `202`
+- the frontend polls every second
+- polling stops after one minute
+- the response includes a resumable poll URL
+
+### In-flight query reuse
+
+The same user can refresh and resubmit the same trend query without starting a duplicate Athena execution.
+
+This works through a DynamoDB-backed query registry keyed by a normalized `requestKey`.
+
+The registry stores:
+
+- `requestKey`
+- `queryExecutionId`
+- `status`
+- `aggregationLevel`
+- `tableName`
+- `expiresAt`
+
+Because the registry uses conditional writes, duplicate long-range requests now attach to the same in-flight query instead of racing each other.
+
+## Refine observations logic
+
+`refine-observations` is the scheduled Lambda that creates the lower-granularity Parquet datasets used by long-range queries.
 
 ### What it does
-1. Runs daily (UTC schedule) and targets the previous UTC day.
-2. Ensures a refined Athena table exists: `observations_refined_15m`.
-3. Checks whether refined rows already exist for that day and skips processing if they do (idempotent behavior).
-4. If not refined yet, aggregates raw `observations` into 15-minute buckets:
-   - average values (for example temperature/humidity/wind averages)
-   - max wind gust
-   - summed rainfall
-   - sample count
-5. Writes refined parquet output to:
-   - `s3://weather-tempest-records/refined/observations_refined_15m/`
-   - partitioned by `year/month/day/hour`
 
-### Query strategy
-- Use raw `observations` for short, high-detail windows.
-- Use `observations_refined_15m` for broader date ranges to significantly reduce Athena scan size and latency.
+1. Runs daily in UTC.
+2. Targets the previous UTC day.
+3. Ensures refined Glue tables exist.
+4. Skips partitions that were already refined.
+5. Writes:
+   - `observations_refined_15m`
+   - `observations_refined_daily`
 
-An example query to get daily average temperature for January 2024:
+### Why this matters
 
-```sql
-SELECT
-  date_trunc('day', timestamp) AS day,
-  AVG(temperature) AS avg_temp
-FROM
-  "weather-tempest-records"."observations_refined_15m"
-WHERE
-  timestamp >= TIMESTAMP '2024-01-01 00:00:00'
-  AND timestamp < TIMESTAMP '2024-02-01 00:00:00'
-GROUP BY
-  date_trunc('day', timestamp)
-ORDER BY
-  day;
-```
-
-An example query to get raw observations for January 1, 2024:
-
-```sql
-SELECT datetime FROM observations
-WHERE year='2026'
-  AND month>='01' AND month<='03'
-  AND day>='01' AND day<='02'
-  AND hour>='01' AND hour<='02'
-ORDER BY datetime DESC LIMIT 500;
-```
+- raw observations are too expensive for long-range trend reads
+- daily rollups make year-scale queries practical
+- monthly views can be derived cheaply from daily data without another always-on service
 
 ## Environment variables
 

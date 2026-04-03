@@ -48,17 +48,24 @@ const fieldValue = (field: string, index: number) => {
 
 const buildRows = (params: WeatherQueryParams): WeatherRow[] => {
   const totalRangeMs = Math.max(params.to.getTime() - params.from.getTime(), 1);
-  const requestedCount = params.dataset === 'raw' ? 48 : 56;
+  const requestedCount = totalRangeMs > 548 * 24 * 60 * 60 * 1000
+    ? 120
+    : totalRangeMs > 7 * 24 * 60 * 60 * 1000
+      ? 180
+      : 56;
   const rowCount = Math.max(2, Math.min(params.limit, requestedCount));
-  const intervalMs = Math.max(Math.floor(totalRangeMs / (rowCount - 1)), params.dataset === 'raw' ? 15 * 60 * 1000 : 3 * 60 * 60 * 1000);
+  const intervalMs = Math.max(
+    Math.floor(totalRangeMs / (rowCount - 1)),
+    totalRangeMs > 548 * 24 * 60 * 60 * 1000
+      ? 28 * 24 * 60 * 60 * 1000
+      : totalRangeMs > 7 * 24 * 60 * 60 * 1000
+        ? 24 * 60 * 60 * 1000
+        : 15 * 60 * 1000,
+  );
 
   return Array.from({ length: rowCount }, (_, index) => {
     const timestamp = params.from.getTime() + intervalMs * index;
     const row = Object.fromEntries(params.fields.map((field) => {
-      if (field === 'datetime') {
-        return [field, Math.floor(timestamp / 1000)];
-      }
-
       if (field === 'period_start') {
         return [field, toIso(timestamp)];
       }
@@ -101,5 +108,11 @@ export const mockFetchWeatherSeries = async (params: WeatherQueryParams): Promis
     dataset: params.dataset,
     fields: params.fields,
     rows: buildRows(params),
+    aggregationLevel:
+      (params.to.getTime() - params.from.getTime()) > 548 * 24 * 60 * 60 * 1000
+        ? 'monthly'
+        : (params.to.getTime() - params.from.getTime()) > 7 * 24 * 60 * 60 * 1000
+          ? 'daily'
+          : '15m',
   };
 };

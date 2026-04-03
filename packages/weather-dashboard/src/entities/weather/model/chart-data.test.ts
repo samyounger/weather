@@ -1,23 +1,25 @@
 import { buildChartData } from './chart-data';
 
 describe('buildChartData', () => {
-  it('formats raw timestamps from epoch seconds', () => {
+  it('formats series timestamps from ISO strings', () => {
     const result = buildChartData({
-      dataset: 'raw',
-      fields: ['datetime', 'airtemperature'],
-      rows: [{ datetime: 1772323200, airtemperature: 17 }],
-    });
-
-    expect(result[0].timestampLabel).toBe('2026-03-01 00:00');
-  });
-
-  it('formats refined timestamps from ISO strings', () => {
-    const result = buildChartData({
-      dataset: 'refined',
+      dataset: 'series',
       fields: ['period_start', 'airtemperature_avg'],
       rows: [{ period_start: '2026-03-01T09:15:00Z', airtemperature_avg: 14.2 }],
+      aggregationLevel: 'daily',
     });
 
     expect(result[0].timestampLabel).toBe('2026-03-01 09:15');
+  });
+
+  it('falls back to an empty timestamp label when period_start is null', () => {
+    const result = buildChartData({
+      dataset: 'series',
+      fields: ['period_start', 'airtemperature_avg'],
+      rows: [{ period_start: null, airtemperature_avg: 14.2 }],
+      aggregationLevel: 'daily',
+    });
+
+    expect(result[0].timestampLabel).toBe('');
   });
 });

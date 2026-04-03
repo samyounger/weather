@@ -1,7 +1,9 @@
 import { AuthTokens } from '../../session/model/session';
 import { RuntimeConfig } from '../../../shared/config/runtime-config';
 
-export type WeatherDataset = 'raw' | 'refined';
+export type WeatherDataset = 'series';
+export type WeatherAggregationLevel = '15m' | 'daily' | 'monthly';
+export type WeatherRangePreset = '24h' | '72h' | '7d' | '30d' | '90d' | '1y' | '3y' | '5y' | 'custom';
 
 export type WeatherFieldOption = {
   key: string;
@@ -24,6 +26,8 @@ export type WeatherSeriesResponse = {
   dataset: WeatherDataset;
   fields: string[];
   rows: WeatherRow[];
+  aggregationLevel: WeatherAggregationLevel;
+  requestKey?: string;
 };
 
 export type FetchWeatherSeries = (

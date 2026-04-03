@@ -145,45 +145,31 @@ a {
   min-height: 420px;
 }
 
+.chart-meta {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.chart-meta-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #edf4f8;
+  color: #355471;
+}
+
+.chart-meta-link {
+  color: #355471;
+  text-decoration: underline;
+}
+
 .chart-container {
   position: relative;
   width: 100%;
   height: 340px;
   margin-top: 20px;
-}
-
-.summary-table-wrap {
-  margin-top: 24px;
-  overflow-x: auto;
-}
-
-.summary-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 420px;
-}
-
-.summary-table caption {
-  margin-bottom: 12px;
-  color: #56708d;
-  font-weight: 600;
-  text-align: left;
-}
-
-.summary-table th,
-.summary-table td {
-  padding: 12px 14px;
-  border-bottom: 1px solid rgba(22, 50, 79, 0.1);
-  text-align: left;
-}
-
-.summary-table thead th {
-  color: #56708d;
-  font-size: 0.95rem;
-}
-
-.summary-table tbody th {
-  font-weight: 600;
 }
 
 .chart-loading {
@@ -207,6 +193,40 @@ a {
   border-top-color: #16324f;
   border-radius: 999px;
   animation: chart-spin 0.8s linear infinite;
+}
+
+.summary-table-wrap {
+  margin-top: 24px;
+  overflow-x: auto;
+}
+
+.summary-table {
+  width: 100%;
+  min-width: 420px;
+  border-collapse: collapse;
+}
+
+.summary-table caption {
+  margin-bottom: 12px;
+  color: #56708d;
+  font-weight: 600;
+  text-align: left;
+}
+
+.summary-table th,
+.summary-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(22, 50, 79, 0.1);
+  text-align: left;
+}
+
+.summary-table thead th {
+  color: #56708d;
+  font-size: 0.95rem;
+}
+
+.summary-table tbody th {
+  font-weight: 600;
 }
 
 .status-banner {

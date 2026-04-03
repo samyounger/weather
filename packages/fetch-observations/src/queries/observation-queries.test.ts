@@ -44,4 +44,42 @@ describe('ObservationQueries', () => {
       ORDER BY period_start ASC LIMIT 25;`);
     });
   });
+
+  describe('.getDailySeriesByDateRange', () => {
+    it('returns a SQL query string for daily rows', () => {
+      const dateProps = {
+        fields: ['period_start', 'windavg_avg'],
+        from: new Date('2026-02-01T00:00:00Z'),
+        to: new Date('2026-03-15T02:20:00Z'),
+        fromEpochSeconds: 1770076800,
+        toEpochSeconds: 1773550800,
+        limit: 100,
+      };
+
+      const subject = ObservationQueries.getDailySeriesByDateRange(dateProps);
+
+      expect(subject).toContain('FROM observations_refined_daily');
+      expect(subject).toContain("(year='2026' AND month='02') OR (year='2026' AND month='03')");
+    });
+  });
+
+  describe('.getMonthlySeriesByDateRange', () => {
+    it('returns a SQL query string for monthly rollups from daily rows', () => {
+      const dateProps = {
+        fields: ['period_start', 'airtemperature_avg', 'rainaccumulation_sum'],
+        from: new Date('2020-02-01T00:00:00Z'),
+        to: new Date('2026-03-15T02:20:00Z'),
+        fromEpochSeconds: 1580515200,
+        toEpochSeconds: 1773550800,
+        limit: 100,
+      };
+
+      const subject = ObservationQueries.getMonthlySeriesByDateRange(dateProps);
+
+      expect(subject).toContain("DATE_TRUNC('month', period_start) AS period_start");
+      expect(subject).toContain('AVG(airtemperature_avg) AS airtemperature_avg');
+      expect(subject).toContain('SUM(rainaccumulation_sum) AS rainaccumulation_sum');
+      expect(subject).toContain('GROUP BY DATE_TRUNC(\'month\', period_start)');
+    });
+  });
 });

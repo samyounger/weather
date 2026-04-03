@@ -19,6 +19,13 @@ Parameters:
     Type: String
     Default: backfill/refined-15m
     Description: Prefix where refined backfill manifests and date chunks are stored.
+  RefinedBackfillGranularity:
+    Type: String
+    Default: 15m
+    AllowedValues:
+      - 15m
+      - daily
+    Description: Aggregate level produced by the refined backfill workflow.
   AthenaDatabase:
     Type: String
     Default: tempest_weather
@@ -180,6 +187,7 @@ Resources:
           BACKFILL_REFINED_RAW_TABLE: !Ref RefinedAthenaRawTable
           BACKFILL_REFINED_TABLE: !Ref RefinedAthenaTable
           BACKFILL_REFINED_LOCATION: !Ref RefinedAthenaLocation
+          BACKFILL_REFINED_GRANULARITY: !Ref RefinedBackfillGranularity
           BACKFILL_ATHENA_OUTPUT: !Ref AthenaOutputLocation
           BACKFILL_ATHENA_WORKGROUP: !Ref AthenaWorkGroup
       Policies:
@@ -204,6 +212,7 @@ Resources:
           BACKFILL_REFINED_RAW_TABLE: !Ref RefinedAthenaRawTable
           BACKFILL_REFINED_TABLE: !Ref RefinedAthenaTable
           BACKFILL_REFINED_LOCATION: !Ref RefinedAthenaLocation
+          BACKFILL_REFINED_GRANULARITY: !Ref RefinedBackfillGranularity
           BACKFILL_ATHENA_OUTPUT: !Ref AthenaOutputLocation
           BACKFILL_ATHENA_WORKGROUP: !Ref AthenaWorkGroup
       Policies:
@@ -451,6 +460,7 @@ Resources:
                 rawTable.$: $.rawTable
                 refinedTable.$: $.refinedTable
                 refinedLocation.$: $.refinedLocation
+                refinedGranularity.$: $.refinedGranularity
                 outputLocation.$: $.outputLocation
                 workGroup.$: $.workGroup
             Next: EnsureMaxConcurrency
@@ -466,6 +476,7 @@ Resources:
               rawTable.$: $.rawTable
               refinedTable.$: $.refinedTable
               refinedLocation.$: $.refinedLocation
+              refinedGranularity.$: $.refinedGranularity
               outputLocation.$: $.outputLocation
               workGroup.$: $.workGroup
             ItemProcessor:
@@ -484,6 +495,7 @@ Resources:
                       rawTable.$: $.rawTable
                       refinedTable.$: $.refinedTable
                       refinedLocation.$: $.refinedLocation
+                      refinedGranularity.$: $.refinedGranularity
                       outputLocation.$: $.outputLocation
                       workGroup.$: $.workGroup
                   Next: ChunkSucceeded

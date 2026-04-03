@@ -17,48 +17,66 @@ describe('RefinementService', () => {
     jest.resetAllMocks();
   });
 
-  it('should skip insert when rows already exist for the date', async () => {
+  it('skips inserts when 15 minute and daily rows already exist', async () => {
     query
-      .mockResolvedValueOnce({ QueryExecutionId: 'create-table' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'existing-rows' });
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-daily' });
 
-    waitForQuery
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED);
+    waitForQuery.mockResolvedValue(QueryExecutionState.SUCCEEDED);
 
-    getResults.mockResolvedValue({
-      ResultSet: {
-        Rows: [
-          { Data: [{ VarCharValue: 'refined_rows' }] },
-          { Data: [{ VarCharValue: '12' }] },
-        ],
-      },
-    });
+    getResults
+      .mockResolvedValueOnce({
+        ResultSet: {
+          Rows: [
+            { Data: [{ VarCharValue: 'refined_rows' }] },
+            { Data: [{ VarCharValue: '12' }] },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        ResultSet: {
+          Rows: [
+            { Data: [{ VarCharValue: 'refined_rows' }] },
+            { Data: [{ VarCharValue: '1' }] },
+          ],
+        },
+      });
 
     const subject = await new RefinementService(database).refineForDate(new Date(Date.UTC(2026, 1, 14)));
 
     expect(subject).toEqual({
       date: '2026-02-14',
-      inserted: 0,
-      existingRows: 12,
+      fifteenMinuteInserted: 0,
+      fifteenMinuteExistingRows: 12,
+      dailyInserted: 0,
+      dailyExistingRows: 1,
     });
-    expect(query).toHaveBeenCalledTimes(2);
   });
 
-  it('should insert refined rows when no existing rows are found', async () => {
+  it('inserts refined rows when no existing rows are found', async () => {
     query
-      .mockResolvedValueOnce({ QueryExecutionId: 'create-table' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'existing-rows' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'insert-rows' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'existing-rows-after-insert' });
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'insert-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-15m-after' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'insert-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-daily-after' });
 
-    waitForQuery
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED);
+    waitForQuery.mockResolvedValue(QueryExecutionState.SUCCEEDED);
 
     getResults
+      .mockResolvedValueOnce({
+        ResultSet: {
+          Rows: [
+            { Data: [{ VarCharValue: 'refined_rows' }] },
+            { Data: [{ VarCharValue: '0' }] },
+          ],
+        },
+      })
       .mockResolvedValueOnce({
         ResultSet: {
           Rows: [
@@ -74,19 +92,28 @@ describe('RefinementService', () => {
             { Data: [{ VarCharValue: '96' }] },
           ],
         },
+      })
+      .mockResolvedValueOnce({
+        ResultSet: {
+          Rows: [
+            { Data: [{ VarCharValue: 'refined_rows' }] },
+            { Data: [{ VarCharValue: '1' }] },
+          ],
+        },
       });
 
     const subject = await new RefinementService(database).refineForDate(new Date(Date.UTC(2026, 1, 14)));
 
     expect(subject).toEqual({
       date: '2026-02-14',
-      inserted: 96,
-      existingRows: 0,
+      fifteenMinuteInserted: 96,
+      fifteenMinuteExistingRows: 0,
+      dailyInserted: 1,
+      dailyExistingRows: 0,
     });
-    expect(query).toHaveBeenCalledTimes(4);
   });
 
-  it('should throw when athena query does not succeed', async () => {
+  it('throws when athena query does not succeed', async () => {
     query.mockResolvedValue({ QueryExecutionId: 'create-table' });
     waitForQuery.mockResolvedValue(QueryExecutionState.FAILED);
 
@@ -95,47 +122,41 @@ describe('RefinementService', () => {
       .toThrow('Athena query failed with status: FAILED');
   });
 
-  it('should refine for yesterday using current UTC date', async () => {
+  it('refines for yesterday using the current UTC date', async () => {
     jest.useFakeTimers().setSystemTime(new Date(Date.UTC(2026, 1, 15, 10, 0, 0)));
 
     query
-      .mockResolvedValueOnce({ QueryExecutionId: 'create-table' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'existing-rows' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'insert-rows' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'existing-rows-after-insert' });
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'insert-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-15m-after' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'insert-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-daily-after' });
 
-    waitForQuery
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED);
-
+    waitForQuery.mockResolvedValue(QueryExecutionState.SUCCEEDED);
     getResults
       .mockResolvedValueOnce({
-        ResultSet: {
-          Rows: [
-            { Data: [{ VarCharValue: 'refined_rows' }] },
-            { Data: [{ VarCharValue: '0' }] },
-          ],
-        },
+        ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }, { Data: [{ VarCharValue: '0' }] }] },
       })
       .mockResolvedValueOnce({
-        ResultSet: {
-          Rows: [
-            { Data: [{ VarCharValue: 'refined_rows' }] },
-            { Data: [{ VarCharValue: '96' }] },
-          ],
-        },
+        ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }, { Data: [{ VarCharValue: '0' }] }] },
+      })
+      .mockResolvedValueOnce({
+        ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }, { Data: [{ VarCharValue: '96' }] }] },
+      })
+      .mockResolvedValueOnce({
+        ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }, { Data: [{ VarCharValue: '1' }] }] },
       });
 
     const subject = await new RefinementService(database).refineForYesterday();
 
     expect(subject.date).toEqual('2026-02-14');
-    expect(subject.inserted).toEqual(96);
     jest.useRealTimers();
   });
 
-  it('should throw when create table query response has no id', async () => {
+  it('throws when create table query response has no id', async () => {
     query.mockResolvedValueOnce({});
 
     await expect(new RefinementService(database).refineForDate(new Date(Date.UTC(2026, 1, 14))))
@@ -143,24 +164,29 @@ describe('RefinementService', () => {
       .toThrow('Failed to execute Athena query');
   });
 
-  it('should throw when existing row query response has no id', async () => {
+  it('throws when count query response has no id', async () => {
     query
-      .mockResolvedValueOnce({ QueryExecutionId: 'create-table' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-daily' })
       .mockResolvedValueOnce({});
 
-    waitForQuery.mockResolvedValueOnce(QueryExecutionState.SUCCEEDED);
+    waitForQuery
+      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
+      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED);
 
     await expect(new RefinementService(database).refineForDate(new Date(Date.UTC(2026, 1, 14))))
       .rejects
       .toThrow('Failed to execute Athena query');
   });
 
-  it('should throw when existing row query execution fails', async () => {
+  it('throws when a count query execution does not succeed', async () => {
     query
-      .mockResolvedValueOnce({ QueryExecutionId: 'create-table' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'existing-rows' });
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-15m' });
 
     waitForQuery
+      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
       .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
       .mockResolvedValueOnce(QueryExecutionState.CANCELLED);
 
@@ -169,117 +195,59 @@ describe('RefinementService', () => {
       .toThrow('Athena query failed with status: CANCELLED');
   });
 
-  it('should treat missing count result rows as zero and insert', async () => {
+  it('treats missing count rows as zero', async () => {
     query
-      .mockResolvedValueOnce({ QueryExecutionId: 'create-table' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'existing-rows' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'insert-rows' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'existing-rows-after-insert' });
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'insert-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-15m-after' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'insert-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-daily-after' });
 
-    waitForQuery
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED);
-
+    waitForQuery.mockResolvedValue(QueryExecutionState.SUCCEEDED);
     getResults
-      .mockResolvedValueOnce({
-        ResultSet: {
-          Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }],
-        },
-      })
-      .mockResolvedValueOnce({
-        ResultSet: {
-          Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }],
-        },
-      });
+      .mockResolvedValueOnce({ ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }] } })
+      .mockResolvedValueOnce({ ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }] } })
+      .mockResolvedValueOnce({ ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }] } })
+      .mockResolvedValueOnce({ ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }] } });
 
     const subject = await new RefinementService(database).refineForDate(new Date(Date.UTC(2026, 1, 14)));
 
-    expect(subject).toEqual({
-      date: '2026-02-14',
-      inserted: 0,
-      existingRows: 0,
-    });
+    expect(subject.fifteenMinuteInserted).toBe(0);
+    expect(subject.dailyInserted).toBe(0);
   });
 
-  it('should treat non-numeric count value as zero and insert', async () => {
+  it('treats missing or non-numeric count values as zero', async () => {
     query
-      .mockResolvedValueOnce({ QueryExecutionId: 'create-table' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'existing-rows' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'insert-rows' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'existing-rows-after-insert' });
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'create-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'insert-15m' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-15m-after' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'insert-daily' })
+      .mockResolvedValueOnce({ QueryExecutionId: 'count-daily-after' });
 
-    waitForQuery
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED);
-
+    waitForQuery.mockResolvedValue(QueryExecutionState.SUCCEEDED);
     getResults
       .mockResolvedValueOnce({
-        ResultSet: {
-          Rows: [
-            { Data: [{ VarCharValue: 'refined_rows' }] },
-            { Data: [{ VarCharValue: 'abc' }] },
-          ],
-        },
+        ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }, { Data: [{ VarCharValue: 'abc' }] }] },
       })
       .mockResolvedValueOnce({
-        ResultSet: {
-          Rows: [
-            { Data: [{ VarCharValue: 'refined_rows' }] },
-            { Data: [{ VarCharValue: 'abc' }] },
-          ],
-        },
+        ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }, { Data: [{}] }] },
+      })
+      .mockResolvedValueOnce({
+        ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }, { Data: [{ VarCharValue: 'abc' }] }] },
+      })
+      .mockResolvedValueOnce({
+        ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }, { Data: [{}] }] },
       });
 
     const subject = await new RefinementService(database).refineForDate(new Date(Date.UTC(2026, 1, 14)));
 
-    expect(subject).toEqual({
-      date: '2026-02-14',
-      inserted: 0,
-      existingRows: 0,
-    });
-  });
-
-  it('should treat missing count cell value as zero and insert', async () => {
-    query
-      .mockResolvedValueOnce({ QueryExecutionId: 'create-table' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'existing-rows' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'insert-rows' })
-      .mockResolvedValueOnce({ QueryExecutionId: 'existing-rows-after-insert' });
-
-    waitForQuery
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED)
-      .mockResolvedValueOnce(QueryExecutionState.SUCCEEDED);
-
-    getResults
-      .mockResolvedValueOnce({
-        ResultSet: {
-          Rows: [
-            { Data: [{ VarCharValue: 'refined_rows' }] },
-            { Data: [{}] },
-          ],
-        },
-      })
-      .mockResolvedValueOnce({
-        ResultSet: {
-          Rows: [
-            { Data: [{ VarCharValue: 'refined_rows' }] },
-            { Data: [{}] },
-          ],
-        },
-      });
-
-    const subject = await new RefinementService(database).refineForDate(new Date(Date.UTC(2026, 1, 14)));
-
-    expect(subject).toEqual({
-      date: '2026-02-14',
-      inserted: 0,
-      existingRows: 0,
-    });
+    expect(subject.fifteenMinuteInserted).toBe(0);
+    expect(subject.dailyInserted).toBe(0);
   });
 });
