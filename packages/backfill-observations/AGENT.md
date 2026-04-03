@@ -4,7 +4,7 @@
 
 One-off backfill workflows for:
 - historical Athena partition registration
-- historical refined 15-minute aggregate generation
+- historical refined aggregate generation for `15m` and `daily` rollups
 
 ## Runtime Behavior
 
@@ -13,7 +13,7 @@ One-off backfill workflows for:
 - Map state processes chunk keys with worker Lambda.
 - Worker submits batched Athena `ALTER TABLE ... ADD IF NOT EXISTS PARTITION ...` statements.
 - Refine planner Lambda builds date-range chunk files (`YYYY-MM-DD`).
-- Refine worker Lambda inserts missing refined rows into `observations_refined_15m`.
+- Refine worker Lambda inserts missing refined rows into `observations_refined_15m` or `observations_refined_daily`.
 - Summarize Lambda reports chunk success/failure totals and failed chunk keys for reruns.
 
 ## Inputs and Defaults
@@ -46,3 +46,4 @@ Planner applies defaults for omitted values.
 
 - Be careful with Step Functions JSONPath usage when task outputs replace state input.
 - Preserve execution-input compatibility for failed-chunk reruns.
+- Keep refined backfill behavior explicit through `refinedGranularity` rather than inferring from table names alone.

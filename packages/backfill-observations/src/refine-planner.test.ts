@@ -25,6 +25,7 @@ describe('refine backfill planner', () => {
     process.env.BACKFILL_REFINED_CHUNK_SIZE = '2';
     delete process.env.BACKFILL_REFINED_START_DATE;
     delete process.env.BACKFILL_REFINED_END_DATE;
+    delete process.env.BACKFILL_REFINED_GRANULARITY;
   });
 
   afterEach(() => {
@@ -97,5 +98,22 @@ describe('refine backfill planner', () => {
     expect(subject.startDate).toBe('2026-02-16');
     expect(subject.endDate).toBe('2026-02-17');
     expect(subject.totalDates).toBe(2);
+  });
+
+  it('should pass through refined granularity when provided', async () => {
+    refineSendMock.mockResolvedValue({});
+
+    const { handler } = await import('./refine-planner');
+    const subject = await handler({
+      startDate: '2026-02-16',
+      endDate: '2026-02-17',
+      refinedGranularity: 'daily',
+      refinedTable: 'observations_refined_daily',
+      refinedLocation: 's3://weather-tempest-records/refined/observations_refined_daily/',
+    });
+
+    expect(subject.refinedGranularity).toBe('daily');
+    expect(subject.refinedTable).toBe('observations_refined_daily');
+    expect(subject.refinedLocation).toBe('s3://weather-tempest-records/refined/observations_refined_daily/');
   });
 });

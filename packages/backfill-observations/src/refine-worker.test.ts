@@ -139,6 +139,55 @@ describe('refine backfill worker', () => {
     });
   });
 
+  it('should process daily rollup backfill when requested', async () => {
+    s3SendMock.mockResolvedValueOnce({
+      Body: Readable.from([JSON.stringify(['2024-08-05'])]),
+    });
+
+    athenaSendMock
+      .mockResolvedValueOnce({ QueryExecutionId: 'query-create' })
+      .mockResolvedValueOnce({ QueryExecution: { Status: { State: QueryExecutionState.SUCCEEDED } } })
+      .mockResolvedValueOnce({ QueryExecutionId: 'query-existing-1' })
+      .mockResolvedValueOnce({ QueryExecution: { Status: { State: QueryExecutionState.SUCCEEDED } } })
+      .mockResolvedValueOnce({ ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }, { Data: [{ VarCharValue: '0' }] }] } })
+      .mockResolvedValueOnce({ QueryExecutionId: 'query-insert' })
+      .mockResolvedValueOnce({ QueryExecution: { Status: { State: QueryExecutionState.SUCCEEDED } } })
+      .mockResolvedValueOnce({ QueryExecutionId: 'query-existing-2' })
+      .mockResolvedValueOnce({ QueryExecution: { Status: { State: QueryExecutionState.SUCCEEDED } } })
+      .mockResolvedValueOnce({ ResultSet: { Rows: [{ Data: [{ VarCharValue: 'refined_rows' }] }, { Data: [{ VarCharValue: '1' }] }] } });
+
+    const { handler } = await import('./refine-worker');
+    const subject = await handler({
+      bucket: 'weather-tempest-records',
+      chunkKey: 'backfill/refined-daily/runs/test/chunks/chunk-00000.json',
+      refinedGranularity: 'daily',
+      refinedTable: 'observations_refined_daily',
+      refinedLocation: 's3://weather-tempest-records/refined/observations_refined_daily/',
+    });
+
+    expect(subject).toEqual({
+      bucket: 'weather-tempest-records',
+      chunkKey: 'backfill/refined-daily/runs/test/chunks/chunk-00000.json',
+      attemptedDates: 1,
+      succeededDates: 1,
+      skippedDates: 0,
+      failedDates: 0,
+      insertedRows: 1,
+    });
+
+    const createTableCommand = athenaSendMock.mock.calls[0][0] as StartQueryExecutionCommand;
+    expect(createTableCommand.input.QueryString).toContain('CREATE EXTERNAL TABLE IF NOT EXISTS observations_refined_daily');
+    expect(createTableCommand.input.QueryString).toContain('PARTITIONED BY');
+    expect(createTableCommand.input.QueryString).toContain('year string');
+    expect(createTableCommand.input.QueryString).toContain('month string');
+    expect(createTableCommand.input.QueryString).not.toContain('day string');
+
+    const insertCommand = athenaSendMock.mock.calls[5][0] as StartQueryExecutionCommand;
+    expect(insertCommand.input.QueryString).toContain("INSERT INTO observations_refined_daily");
+    expect(insertCommand.input.QueryString).toContain("DATE_TRUNC('day', FROM_UNIXTIME(datetime)) AS period_start");
+    expect(insertCommand.input.QueryString).not.toContain("DATE_FORMAT(period_start, '%d') AS day");
+  });
+
   it('should throw when start query does not return an execution id', async () => {
     s3SendMock.mockResolvedValueOnce({
       Body: Readable.from([JSON.stringify(['2024-08-05'])]),
