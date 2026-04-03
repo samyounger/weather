@@ -25,6 +25,7 @@ export const DashboardShell = () => {
   const [state, setState] = useState<QueryState>(initialState);
   const [chartRows, setChartRows] = useState<Record<string, string | number | null>[]>([]);
   const [status, setStatus] = useState<string>('Loading latest data');
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const availableFields = useMemo(
@@ -40,6 +41,7 @@ export const DashboardShell = () => {
     const loadSeries = async () => {
       try {
         setError(null);
+        setIsLoading(true);
         setStatus('Fetching weather data');
         const range = getPresetRange(state.preset);
         const query = buildWeatherQueryParams({
@@ -55,6 +57,8 @@ export const DashboardShell = () => {
         setStatus(`Showing ${response.rows.length} points from ${state.dataset} observations`);
       } catch (requestError) {
         setError(requestError instanceof Error ? requestError.message : 'Unable to load weather data');
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -102,6 +106,12 @@ export const DashboardShell = () => {
             {error ?? status}
           </div>
           <div className="chart-container">
+            {isLoading ? (
+              <div className="chart-loading" aria-live="polite" aria-label="Loading chart data">
+                <div className="chart-spinner" />
+                <span>Loading chart data</span>
+              </div>
+            ) : null}
             <ResponsiveContainer>
               <LineChart data={chartRows}>
                 <CartesianGrid strokeDasharray="4 4" stroke="#cbd8df" />

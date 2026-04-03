@@ -12,6 +12,7 @@ const createMockTokens = (email: string, refreshToken = 'local-refresh-token'): 
 });
 
 const round = (value: number) => Math.round(value * 100) / 100;
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const fieldValue = (field: string, index: number) => {
   switch (field) {
@@ -93,8 +94,12 @@ export const mockConfirmSignUp = async (input: ConfirmSignUpInput) => {
   }
 };
 
-export const mockFetchWeatherSeries = async (params: WeatherQueryParams): Promise<WeatherSeriesResponse> => ({
-  dataset: params.dataset,
-  fields: params.fields,
-  rows: buildRows(params),
-});
+export const mockFetchWeatherSeries = async (params: WeatherQueryParams): Promise<WeatherSeriesResponse> => {
+  await delay(1500);
+
+  return {
+    dataset: params.dataset,
+    fields: params.fields,
+    rows: buildRows(params),
+  };
+};
