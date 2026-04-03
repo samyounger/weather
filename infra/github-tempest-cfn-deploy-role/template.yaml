@@ -48,7 +48,6 @@ Resources:
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-fetch-lib/*
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-refine-lib/*
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-backfill-lib/*
-              - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-dashboard-lib/*
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-github-cfn-deploy-role/*
               - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/aws-sam-cli-managed-default/*
           - Sid: CloudFormationSamTransform
@@ -151,6 +150,49 @@ Resources:
               - arn:aws:s3:::tempest-artifacts-refine-prod*/*
               - arn:aws:s3:::tempest-artifacts-backfill-prod*
               - arn:aws:s3:::tempest-artifacts-backfill-prod*/*
+
+  GitHubTempestCfnDeployRoleDashboardManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: TempestGitHubCfnDeployRoleDashboardPolicy
+      Roles:
+        - !Ref DeployRoleName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudFormationForDashboardDeploy
+            Effect: Allow
+            Action:
+              - cloudformation:CreateStack
+              - cloudformation:UpdateStack
+              - cloudformation:DeleteStack
+              - cloudformation:CreateChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackEvents
+              - cloudformation:DescribeStackResources
+              - cloudformation:GetTemplateSummary
+              - cloudformation:GetTemplate
+              - cloudformation:ValidateTemplate
+            Resource:
+              - !Sub arn:aws:cloudformation:${ArtifactRegion}:${ArtifactAccountId}:stack/tempest-weather-dashboard-lib/*
+          - Sid: DashboardArtifactBucketAccess
+            Effect: Allow
+            Action:
+              - s3:CreateBucket
+              - s3:GetBucketLocation
+              - s3:ListBucket
+              - s3:PutLifecycleConfiguration
+              - s3:GetLifecycleConfiguration
+              - s3:PutObject
+              - s3:GetObject
+              - s3:DeleteObject
+              - s3:AbortMultipartUpload
+              - s3:ListBucketMultipartUploads
+              - s3:ListMultipartUploadParts
+            Resource:
               - arn:aws:s3:::tempest-artifacts-dashboard-prod*
               - arn:aws:s3:::tempest-artifacts-dashboard-prod*/*
           - Sid: DashboardAssetBucketAccess
