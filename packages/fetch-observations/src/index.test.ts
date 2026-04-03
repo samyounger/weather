@@ -2,7 +2,7 @@ import { handler } from './index';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from "aws-lambda";
 import { QueryExecutionState } from '@aws-sdk/client-athena';
 
-const mockDatabaseGetResults = jest.fn().mockResolvedValue(JSON.parse('{"ResultSet": {"Rows": [{"Data": [{"VarCharValue": "2020-01-01T00:00:00Z"}]}]}, "NextToken": "next-1"}'));
+const mockDatabaseGetResults = jest.fn().mockResolvedValue(JSON.parse('{"ResultSet": {"Rows": [{"Data": [{"VarCharValue": "datetime"}]}, {"Data": [{"VarCharValue": "2020-01-01T00:00:00Z"}]}]}, "NextToken": "next-1"}'));
 const mockDatabaseGetQueryState = jest.fn().mockResolvedValue(QueryExecutionState.SUCCEEDED);
 const mockDatabaseQuery = jest.fn().mockResolvedValue({ QueryExecutionId: 'async-123' });
 const mockDatabaseWaitForQuery = jest.fn().mockResolvedValue(QueryExecutionState.SUCCEEDED);
@@ -92,7 +92,7 @@ describe('handler', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockDatabaseGetResults.mockResolvedValue(JSON.parse('{"ResultSet": {"Rows": [{"Data": [{"VarCharValue": "2020-01-01T00:00:00Z"}]}]}, "NextToken": "next-1"}'));
+    mockDatabaseGetResults.mockResolvedValue(JSON.parse('{"ResultSet": {"Rows": [{"Data": [{"VarCharValue": "datetime"}]}, {"Data": [{"VarCharValue": "2020-01-01T00:00:00Z"}]}]}, "NextToken": "next-1"}'));
     mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.SUCCEEDED);
     mockDatabaseQuery.mockResolvedValue({ QueryExecutionId: 'async-123' });
     mockDatabaseWaitForQuery.mockResolvedValue(QueryExecutionState.SUCCEEDED);

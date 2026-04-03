@@ -82,6 +82,28 @@ describe('handler', () => {
     }));
   });
 
+  it('should return a no-data message when there were no existing rows and no inserts', async () => {
+    mockRefineForYesterday.mockResolvedValueOnce({
+      date: '2026-02-14',
+      fifteenMinuteInserted: 0,
+      fifteenMinuteExistingRows: 0,
+      dailyInserted: 0,
+      dailyExistingRows: 0,
+    });
+
+    await invokeHandler();
+
+    expect(subject.statusCode).toBe(200);
+    expect(subject.body).toEqual(JSON.stringify({
+      message: 'No raw observations were available for the target date',
+      date: '2026-02-14',
+      fifteenMinuteInserted: 0,
+      fifteenMinuteExistingRows: 0,
+      dailyInserted: 0,
+      dailyExistingRows: 0,
+    }));
+  });
+
   it('rethrows unexpected refinement errors', async () => {
     mockRefineForYesterday.mockRejectedValueOnce(new Error('boom'));
 

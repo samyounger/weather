@@ -12,18 +12,24 @@ export const handler = async (_event: APIGatewayProxyEvent): Promise<APIGatewayP
   try {
     const refinementService = new RefinementService(new Database());
     const refinementSummary = await refinementService.refineForYesterday();
+    const insertedRows = refinementSummary.fifteenMinuteInserted + refinementSummary.dailyInserted;
+    const existingRows = refinementSummary.fifteenMinuteExistingRows + refinementSummary.dailyExistingRows;
+    const message = insertedRows > 0
+      ? 'Observations refined successfully'
+      : existingRows > 0
+        ? 'Observations were already refined for target date'
+        : 'No raw observations were available for the target date';
 
     console.info('refine-observations invocation completed', {
       service: 'refine-observations',
       refinementSummary,
+      message,
     });
 
     return {
       statusCode: 200,
       body: JSON.stringify({
-        message: refinementSummary.fifteenMinuteInserted > 0 || refinementSummary.dailyInserted > 0
-          ? 'Observations refined successfully'
-          : 'Observations were already refined for target date',
+        message,
         date: refinementSummary.date,
         fifteenMinuteInserted: refinementSummary.fifteenMinuteInserted,
         fifteenMinuteExistingRows: refinementSummary.fifteenMinuteExistingRows,
