@@ -340,6 +340,19 @@ Resources:
               - !Sub arn:aws:glue:${ArtifactRegion}:${ArtifactAccountId}:database/tempest_weather
               - !Sub arn:aws:glue:${ArtifactRegion}:${ArtifactAccountId}:table/tempest_weather/observations
               - !Sub arn:aws:glue:${ArtifactRegion}:${ArtifactAccountId}:table/tempest_weather/observations_refined_15m
+              - !Sub arn:aws:glue:${ArtifactRegion}:${ArtifactAccountId}:table/tempest_weather/observations_refined_daily
+          - Sid: DynamoDbForTempestDeploys
+            Effect: Allow
+            Action:
+              - dynamodb:CreateTable
+              - dynamodb:DeleteTable
+              - dynamodb:DescribeTable
+              - dynamodb:UpdateTable
+              - dynamodb:TagResource
+              - dynamodb:UntagResource
+              - dynamodb:ListTagsOfResource
+            Resource:
+              - !Sub arn:aws:dynamodb:${ArtifactRegion}:${ArtifactAccountId}:table/tempest-*
           - Sid: AthenaIfStackNeedsIt
             Effect: Allow
             Action:
