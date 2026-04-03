@@ -242,13 +242,13 @@ const handleSeriesQuery = async (
     }
 
     const state = await databaseService.getQueryState(existingRecord.queryExecutionId);
-    if (state === QueryExecutionState.SUCCEEDED || existingRecord.status === 'SUCCEEDED') {
-      await queryRegistry.update({
-        requestKey: existingRecord.requestKey,
-        status: 'SUCCEEDED',
-        updatedAt: nowIso(),
-        expiresAt: expiresAtEpochSeconds(),
-      });
+      if (state === QueryExecutionState.SUCCEEDED || existingRecord.status === 'SUCCEEDED') {
+        await queryRegistry.update({
+          requestKey: existingRecord.requestKey,
+          status: queryStateToRegistryStatus(QueryExecutionState.SUCCEEDED),
+          updatedAt: nowIso(),
+          expiresAt: expiresAtEpochSeconds(),
+        });
 
       return await buildSeriesSuccessResponse({
         databaseService,
@@ -385,7 +385,7 @@ const handleSeriesQuery = async (
   if (queryState === QueryExecutionState.SUCCEEDED) {
     await queryRegistry.update({
       requestKey,
-      status: 'SUCCEEDED',
+      status: queryStateToRegistryStatus(QueryExecutionState.SUCCEEDED),
       updatedAt: nowIso(),
       expiresAt: expiresAtEpochSeconds(),
     });

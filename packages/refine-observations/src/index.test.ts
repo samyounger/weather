@@ -81,4 +81,10 @@ describe('handler', () => {
       dailyExistingRows: 1,
     }));
   });
+
+  it('rethrows unexpected refinement errors', async () => {
+    mockRefineForYesterday.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(handler(mockEvent)).rejects.toThrow('boom');
+  });
 });

@@ -43,7 +43,12 @@ export class QueryRegistry {
         return null;
       }
 
-      return JSON.parse(await toBodyString(response.Body)) as QueryRegistryRecord;
+      const body = await toBodyString(response.Body);
+      if (!body) {
+        return null;
+      }
+
+      return JSON.parse(body) as QueryRegistryRecord;
     } catch (error) {
       if (error instanceof NoSuchKey || (error as { name?: string }).name === 'NoSuchKey') {
         return null;

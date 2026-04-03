@@ -11,4 +11,15 @@ describe('buildChartData', () => {
 
     expect(result[0].timestampLabel).toBe('2026-03-01 09:15');
   });
+
+  it('falls back to an empty timestamp label when period_start is null', () => {
+    const result = buildChartData({
+      dataset: 'series',
+      fields: ['period_start', 'airtemperature_avg'],
+      rows: [{ period_start: null, airtemperature_avg: 14.2 }],
+      aggregationLevel: 'daily',
+    });
+
+    expect(result[0].timestampLabel).toBe('');
+  });
 });

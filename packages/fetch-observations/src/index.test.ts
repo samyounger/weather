@@ -136,6 +136,53 @@ describe('handler', () => {
     }));
   });
 
+  it('supports rawPath when present on the event', async () => {
+    await callHandler({
+      ...syncEvent,
+      path: '/ignored',
+      rawPath: '/observations',
+    } as APIGatewayProxyEvent & { rawPath: string });
+
+    expect(subject.statusCode).toBe(200);
+  });
+
+  it('returns 500 when query preparation fails', async () => {
+    mockQueryPreparationValid.mockReturnValue(false);
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(500);
+    expect(subject.body).toEqual(JSON.stringify({ error: 'Mock error message two' }));
+  });
+
+  it('returns 400 when validated query params are unavailable', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue(undefined);
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(400);
+    expect(subject.body).toEqual(JSON.stringify({ error: 'Unable to parse query parameters' }));
+  });
+
+  it('returns 400 when sync mode is missing date range params', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({ mode: 'sync' });
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(400);
+    expect(subject.body).toEqual(JSON.stringify({ error: 'Sync mode requires from and to query parameters' }));
+  });
+
+  it('returns 500 when sync result set is empty', async () => {
+    mockQueryPreparationValid.mockReturnValue(true);
+    mockDatabaseGetResults.mockResolvedValueOnce({ ResultSet: { Rows: [] } });
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(500);
+    expect(subject.body).toEqual(JSON.stringify({ error: 'Failed to retrieve Athena query results' }));
+  });
+
   it('returns 200 with cached data for succeeded series queries', async () => {
     mockQueryParamValidatorValidated.mockReturnValue({
       mode: 'sync',
@@ -240,6 +287,454 @@ describe('handler', () => {
     expect(subject.body).toContain('"requestKey":"request-1"');
   });
 
+  it('builds a relative poll url when the request context has no domain name', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'async',
+      requestKey: 'request-1',
+    });
+    mockRegistryGet.mockResolvedValue({
+      requestKey: 'request-1',
+      queryExecutionId: 'async-123',
+      status: 'RUNNING',
+      aggregationLevel: 'monthly',
+      tableName: 'observations_refined_daily',
+    });
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.RUNNING);
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+      requestContext: {
+        ...syncEvent.requestContext,
+        domainName: undefined,
+      },
+    } as unknown as APIGatewayProxyEvent);
+
+    expect(subject.body).toContain('/series?mode=async&requestKey=request-1');
+  });
+
+  it('includes a non-default stage in the series poll url', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'async',
+      requestKey: 'request-1',
+    });
+    mockRegistryGet.mockResolvedValue({
+      requestKey: 'request-1',
+      queryExecutionId: 'async-123',
+      status: 'RUNNING',
+      aggregationLevel: 'monthly',
+      tableName: 'observations_refined_daily',
+    });
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.RUNNING);
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+      requestContext: {
+        ...syncEvent.requestContext,
+        stage: 'prod',
+      },
+    } as unknown as APIGatewayProxyEvent);
+
+    expect(subject.body).toContain('https://example.execute-api.eu-west-2.amazonaws.com/prod/series?mode=async&requestKey=request-1');
+  });
+
+  it('returns a succeeded series payload when Athena reports success during polling', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'async',
+      requestKey: 'request-1',
+      nextToken: 'next-1',
+    });
+    mockRegistryGet.mockResolvedValue({
+      requestKey: 'request-1',
+      queryExecutionId: 'async-123',
+      status: 'RUNNING',
+      aggregationLevel: 'monthly',
+      tableName: 'observations_refined_daily',
+    });
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.SUCCEEDED);
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+    } as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(200);
+    expect(subject.body).toContain('"status":"SUCCEEDED"');
+  });
+
+  it('returns a succeeded series payload when the registry already marks it complete', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'async',
+      requestKey: 'request-1',
+      nextToken: 'next-1',
+    });
+    mockRegistryGet.mockResolvedValue({
+      requestKey: 'request-1',
+      queryExecutionId: 'async-123',
+      status: 'SUCCEEDED',
+      aggregationLevel: 'monthly',
+      tableName: 'observations_refined_daily',
+    });
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.RUNNING);
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+    } as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(200);
+    expect(subject.body).toContain('"status":"SUCCEEDED"');
+  });
+
+  it('returns 404 when polling a missing requestKey', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'async',
+      requestKey: 'missing-request',
+    });
+    mockRegistryGet.mockResolvedValue(null);
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+    } as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(404);
+  });
+
+  it('returns 500 when a polled series query fails', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'async',
+      requestKey: 'request-1',
+    });
+    mockRegistryGet.mockResolvedValue({
+      requestKey: 'request-1',
+      queryExecutionId: 'async-123',
+      status: 'RUNNING',
+      aggregationLevel: 'monthly',
+      tableName: 'observations_refined_daily',
+    });
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.FAILED);
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+    } as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(500);
+    expect(subject.body).toContain('"status":"FAILED"');
+  });
+
+  it('returns 400 when a series sync request is missing range params', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({ mode: 'sync' });
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+    } as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(400);
+    expect(subject.body).toEqual(JSON.stringify({ error: 'Series queries require from and to query parameters' }));
+  });
+
+  it('returns 500 when a series query cannot start in Athena', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'sync',
+      from: new Date('2024-02-19T00:00:00Z'),
+      to: new Date('2026-02-19T01:00:00Z'),
+      fromEpochSeconds: 1708300800,
+      toEpochSeconds: 1771462800,
+      fields: ['period_start', 'airtemperature_avg'],
+      limit: 100,
+      resolution: 'auto',
+    });
+    mockDatabaseQuery.mockResolvedValueOnce({ QueryExecutionId: undefined });
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+    } as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(500);
+    expect(subject.body).toEqual(JSON.stringify({ error: 'Failed to execute Athena query' }));
+  });
+
+  it('returns the latest pending record when another request won the create race', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'sync',
+      from: new Date('2024-02-19T00:00:00Z'),
+      to: new Date('2026-02-19T01:00:00Z'),
+      fromEpochSeconds: 1708300800,
+      toEpochSeconds: 1771462800,
+      fields: ['period_start', 'airtemperature_avg'],
+      limit: 100,
+      resolution: 'auto',
+    });
+    mockRegistryCreate.mockResolvedValue(false);
+    mockRegistryGet
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        requestKey: 'request-1',
+        queryExecutionId: 'async-123',
+        status: 'RUNNING',
+        aggregationLevel: 'monthly',
+        tableName: 'observations_refined_daily',
+      });
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+    } as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(202);
+    expect(subject.body).toContain('"status":"PENDING"');
+  });
+
+  it('returns the latest succeeded record when another request won the create race', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'sync',
+      from: new Date('2024-02-19T00:00:00Z'),
+      to: new Date('2026-02-19T01:00:00Z'),
+      fromEpochSeconds: 1708300800,
+      toEpochSeconds: 1771462800,
+      fields: ['period_start', 'airtemperature_avg'],
+      limit: 100,
+      resolution: 'auto',
+    });
+    mockRegistryCreate.mockResolvedValue(false);
+    mockRegistryGet
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        requestKey: 'request-1',
+        queryExecutionId: 'async-123',
+        status: 'SUCCEEDED',
+        aggregationLevel: 'monthly',
+        tableName: 'observations_refined_daily',
+      });
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+    } as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(202);
+    expect(subject.body).toContain('"status":"SUCCEEDED"');
+  });
+
+  it('continues to pending when the create race loses and the latest record is unavailable', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'sync',
+      from: new Date('2024-02-19T00:00:00Z'),
+      to: new Date('2026-02-19T01:00:00Z'),
+      fromEpochSeconds: 1708300800,
+      toEpochSeconds: 1771462800,
+      fields: ['period_start', 'airtemperature_avg'],
+      limit: 100,
+      resolution: 'auto',
+    });
+    mockRegistryCreate.mockResolvedValue(false);
+    mockRegistryGet.mockResolvedValue(null);
+    mockDatabaseWaitForQuery.mockResolvedValue(undefined);
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+    } as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(202);
+    expect(subject.body).toContain('"status":"PENDING"');
+  });
+
+  it('returns series data immediately when the Athena query completes within the sync budget', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'sync',
+      from: new Date('2024-02-19T00:00:00Z'),
+      to: new Date('2026-02-19T01:00:00Z'),
+      fromEpochSeconds: 1708300800,
+      toEpochSeconds: 1771462800,
+      fields: ['period_start', 'airtemperature_avg'],
+      limit: 100,
+      resolution: 'auto',
+      nextToken: 'next-1',
+    });
+    mockDatabaseWaitForQuery.mockResolvedValue(QueryExecutionState.SUCCEEDED);
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+    } as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(200);
+    expect(subject.body).toContain('"status":"SUCCEEDED"');
+  });
+
+  it('uses the 15 minute query path for short explicit series ranges', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'sync',
+      from: new Date('2026-02-19T00:00:00Z'),
+      to: new Date('2026-02-19T01:00:00Z'),
+      fromEpochSeconds: 1771459200,
+      toEpochSeconds: 1771462800,
+      fields: ['period_start', 'airtemperature_avg'],
+      limit: 100,
+      resolution: '15m',
+      nextToken: 'next-1',
+    });
+    mockDatabaseWaitForQuery.mockResolvedValue(QueryExecutionState.SUCCEEDED);
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+      requestContext: {
+        ...syncEvent.requestContext,
+        authorizer: {
+          jwt: {
+            claims: {
+              email: 'user@example.com',
+            },
+          },
+        },
+      },
+    } as unknown as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(200);
+    expect(mockDatabaseQuery).toHaveBeenCalledWith(expect.stringContaining('FROM observations_refined_15m'));
+  });
+
+  it('uses the daily query path for medium explicit series ranges with anonymous fallback', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'sync',
+      from: new Date('2026-02-01T00:00:00Z'),
+      to: new Date('2026-03-15T01:00:00Z'),
+      fromEpochSeconds: 1770000000,
+      toEpochSeconds: 1773000000,
+      fields: ['period_start', 'airtemperature_avg'],
+      limit: 100,
+      resolution: 'daily',
+      nextToken: 'next-1',
+    });
+    mockDatabaseWaitForQuery.mockResolvedValue(QueryExecutionState.SUCCEEDED);
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+      requestContext: {
+        ...syncEvent.requestContext,
+        authorizer: undefined,
+      },
+    } as unknown as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(200);
+    expect(mockDatabaseQuery).toHaveBeenCalledWith(expect.stringContaining('FROM observations_refined_daily'));
+  });
+
+  it('returns 500 when the series Athena query ends cancelled within the sync budget', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'sync',
+      from: new Date('2024-02-19T00:00:00Z'),
+      to: new Date('2026-02-19T01:00:00Z'),
+      fromEpochSeconds: 1708300800,
+      toEpochSeconds: 1771462800,
+      fields: ['period_start', 'airtemperature_avg'],
+      limit: 100,
+      resolution: 'auto',
+    });
+    mockDatabaseWaitForQuery.mockResolvedValue(QueryExecutionState.CANCELLED);
+
+    await callHandler({
+      ...syncEvent,
+      path: '/series',
+    } as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(500);
+    expect(subject.body).toContain('"status":"FAILED"');
+  });
+
+  it('returns 500 when async polling reports a cancelled standard Athena query', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({ mode: 'async', queryExecutionId: 'async-123' });
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.CANCELLED);
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(500);
+  });
+
+  it('returns 202 while a standard async Athena query is still running', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({ mode: 'async', queryExecutionId: 'async-123' });
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.RUNNING);
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(202);
+  });
+
+  it('returns 200 with data when a standard async Athena query succeeds', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({ mode: 'async', queryExecutionId: 'async-123', nextToken: 'next-1' });
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.SUCCEEDED);
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(200);
+    expect(subject.body).toContain('"status":"SUCCEEDED"');
+  });
+
+  it('returns 500 when a standard async Athena query fails', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({ mode: 'async', queryExecutionId: 'async-123' });
+    mockDatabaseGetQueryState.mockResolvedValue(QueryExecutionState.FAILED);
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(500);
+  });
+
+  it('starts a standard async Athena query for observations', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'async',
+      from: new Date('2026-02-19T00:00:00Z'),
+      to: new Date('2026-02-19T01:00:00Z'),
+      fromEpochSeconds: 1771459200,
+      toEpochSeconds: 1771462800,
+      fields: ['datetime', 'winddirection'],
+      limit: 100,
+      resolution: 'auto',
+    });
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(202);
+    expect(subject.body).toContain('"status":"RUNNING"');
+  });
+
+  it('returns 400 when async mode start does not include range params', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({ mode: 'async' });
+
+    await callHandler(syncEvent);
+
+    expect(subject.statusCode).toBe(400);
+    expect(subject.body).toEqual(JSON.stringify({ error: 'Async mode start requires from and to query parameters' }));
+  });
+
+  it('starts async query on refined endpoint and returns 202 with queryExecutionId', async () => {
+    mockQueryParamValidatorValidated.mockReturnValue({
+      mode: 'async',
+      from: new Date('2026-02-19T00:00:00Z'),
+      to: new Date('2026-02-19T01:00:00Z'),
+      fromEpochSeconds: 1771459200,
+      toEpochSeconds: 1771462800,
+      fields: ['period_start', 'windavg_avg'],
+      limit: 100,
+      resolution: 'auto',
+    });
+
+    await callHandler({
+      ...syncEvent,
+      path: '/refined',
+    } as APIGatewayProxyEvent);
+
+    expect(subject.statusCode).toBe(202);
+    expect(mockDatabaseQuery).toHaveBeenCalledWith(expect.stringContaining('FROM observations_refined_15m'));
+  });
+
   it('returns 404 for unsupported endpoint path', async () => {
     await callHandler({
       ...syncEvent,
@@ -248,5 +743,12 @@ describe('handler', () => {
 
     expect(subject.statusCode).toBe(404);
     expect(subject.body).toEqual(JSON.stringify({ error: 'Unsupported endpoint. Use /observations, /refined, or /series' }));
+  });
+
+  it('rethrows unexpected runtime errors', async () => {
+    mockQueryPreparationValid.mockReturnValue(true);
+    mockDatabaseGetResults.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(handler(syncEvent, mockContext)).rejects.toThrow('boom');
   });
 });
