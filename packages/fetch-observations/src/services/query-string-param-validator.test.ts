@@ -1,5 +1,5 @@
 import { QueryStringParams, QueryStringParamValidator } from "./query-string-param-validator";
-import { OBSERVATIONS_QUERY_TARGET, REFINED_QUERY_TARGET } from "./query-target";
+import { OBSERVATIONS_QUERY_TARGET, REFINED_QUERY_TARGET, SERIES_QUERY_TARGET } from "./query-target";
 
 const queryStringParams: QueryStringParams = {
   from: '2026-02-19T00:00:00Z',
@@ -17,6 +17,7 @@ describe('QueryStringParamValidator', () => {
       expect(service.validated()).toEqual({
         mode: 'sync',
         queryExecutionId: undefined,
+        requestKey: undefined,
         nextToken: undefined,
         from: new Date('2026-02-19T00:00:00Z'),
         to: new Date('2026-02-19T01:00:00Z'),
@@ -24,6 +25,7 @@ describe('QueryStringParamValidator', () => {
         toEpochSeconds: 1771462800,
         fields: ['winddirection', 'airtemperature'],
         limit: 50,
+        resolution: 'auto',
       });
     });
 
@@ -34,7 +36,32 @@ describe('QueryStringParamValidator', () => {
       expect(service.validated()).toEqual({
         mode: 'async',
         queryExecutionId: 'query-123',
+        requestKey: undefined,
         nextToken: 'abc',
+      });
+    });
+
+    it('returns true for async poll requests with requestKey only', () => {
+      const service = new QueryStringParamValidator({ mode: 'async', requestKey: 'request-123' }, SERIES_QUERY_TARGET);
+
+      expect(service.valid()).toBe(true);
+      expect(service.validated()).toEqual({
+        mode: 'async',
+        queryExecutionId: undefined,
+        requestKey: 'request-123',
+        nextToken: undefined,
+      });
+    });
+
+    it('prefers async polling when both requestKey and queryExecutionId are present', () => {
+      const service = new QueryStringParamValidator({ mode: 'async', queryExecutionId: 'query-123', requestKey: 'request-123' }, OBSERVATIONS_QUERY_TARGET);
+
+      expect(service.valid()).toBe(true);
+      expect(service.validated()).toEqual({
+        mode: 'async',
+        queryExecutionId: 'query-123',
+        requestKey: 'request-123',
+        nextToken: undefined,
       });
     });
 
@@ -45,6 +72,7 @@ describe('QueryStringParamValidator', () => {
       expect(service.validated()).toEqual({
         mode: 'async',
         queryExecutionId: 'query-123',
+        requestKey: undefined,
         nextToken: undefined,
       });
     });
@@ -82,6 +110,15 @@ describe('QueryStringParamValidator', () => {
 
       expect(service.valid()).toBe(false);
       expect(service.returnError()).toBe('Date range cannot exceed 7 days');
+    });
+
+    it('allows long ranges for series queries', () => {
+      const service = new QueryStringParamValidator({ from: '2020-02-01T00:00:00Z', to: '2026-02-09T00:00:01Z' }, SERIES_QUERY_TARGET);
+
+      expect(service.valid()).toBe(true);
+      expect(service.validated()).toMatchObject({
+        resolution: 'auto',
+      });
     });
 
     it('returns false when limit exceeds max', () => {
@@ -124,6 +161,15 @@ describe('QueryStringParamValidator', () => {
         fields: [],
       });
     });
+
+    it('defaults mode to sync when it is omitted', () => {
+      const service = new QueryStringParamValidator({ from: '2026-02-19T00:00:00Z', to: '2026-02-19T01:00:00Z' }, OBSERVATIONS_QUERY_TARGET);
+
+      expect(service.valid()).toBe(true);
+      expect(service.validated()).toMatchObject({
+        mode: 'sync',
+      });
+    });
   });
 
   describe('#returnError', () => {
@@ -148,5 +194,29 @@ describe('QueryStringParamValidator', () => {
     expect(service.validated()).toMatchObject({
       fields: ['period_start', 'winddirection_avg', 'windavg_avg', 'windgust_max', 'airtemperature_avg', 'relativehumidity_avg', 'rainaccumulation_sum'],
     });
+  });
+
+  it('accepts explicit resolution overrides for series queries', () => {
+    const service = new QueryStringParamValidator({
+      from: '2026-02-19T00:00:00Z',
+      to: '2026-02-20T01:00:00Z',
+      resolution: 'monthly',
+    }, SERIES_QUERY_TARGET);
+
+    expect(service.valid()).toBe(true);
+    expect(service.validated()).toMatchObject({
+      resolution: 'monthly',
+    });
+  });
+
+  it('rejects invalid resolution values', () => {
+    const service = new QueryStringParamValidator({
+      from: '2026-02-19T00:00:00Z',
+      to: '2026-02-20T01:00:00Z',
+      resolution: 'hourly',
+    }, SERIES_QUERY_TARGET);
+
+    expect(service.valid()).toBe(false);
+    expect(service.returnError()).toBe('resolution must be auto, 15m, daily, or monthly');
   });
 });

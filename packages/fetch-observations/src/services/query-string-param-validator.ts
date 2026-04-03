@@ -9,11 +9,14 @@ export interface QueryStringParams extends APIGatewayProxyEventQueryStringParame
   nextToken?: string;
   mode?: string;
   queryExecutionId?: string;
+  requestKey?: string;
+  resolution?: string;
 }
 
 export interface ValidatedQueryStringParams {
   mode: 'sync' | 'async';
   queryExecutionId?: string;
+  requestKey?: string;
   nextToken?: string;
   from?: Date;
   to?: Date;
@@ -21,11 +24,11 @@ export interface ValidatedQueryStringParams {
   toEpochSeconds?: number;
   fields?: string[];
   limit?: number;
+  resolution?: 'auto' | '15m' | 'daily' | 'monthly';
 }
 
 const MAX_LIMIT = 1000;
 const DEFAULT_LIMIT = 100;
-const MAX_RANGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const parseIsoDate = (input: string): Date | null => {
   const timestamp = Date.parse(input);
@@ -74,11 +77,13 @@ export class QueryStringParamValidator {
     }
 
     const queryExecutionId = this.queryStringParams?.queryExecutionId;
+    const requestKey = this.queryStringParams?.requestKey;
 
-    if (mode === 'async' && queryExecutionId) {
+    if (mode === 'async' && (queryExecutionId || requestKey)) {
       this.validatedParams = {
         mode,
         queryExecutionId,
+        requestKey,
         nextToken: this.queryStringParams?.nextToken,
       };
 
@@ -103,8 +108,8 @@ export class QueryStringParamValidator {
       return false;
     }
 
-    if ((to.getTime() - from.getTime()) > MAX_RANGE_MS) {
-      this.errorText = 'Date range cannot exceed 7 days';
+    if (this.queryTarget.maxRangeMs && (to.getTime() - from.getTime()) > this.queryTarget.maxRangeMs) {
+      this.errorText = `Date range cannot exceed ${Math.round(this.queryTarget.maxRangeMs / (24 * 60 * 60 * 1000))} days`;
       return false;
     }
 
@@ -124,9 +129,15 @@ export class QueryStringParamValidator {
       return false;
     }
 
+    const resolution = this.parseResolution();
+    if (!resolution) {
+      return false;
+    }
+
     this.validatedParams = {
       mode,
       queryExecutionId,
+      requestKey,
       nextToken: this.queryStringParams?.nextToken,
       from,
       to,
@@ -134,6 +145,7 @@ export class QueryStringParamValidator {
       toEpochSeconds: Math.floor(to.getTime() / 1000),
       fields,
       limit,
+      resolution,
     };
 
     return true;
@@ -182,5 +194,15 @@ export class QueryStringParamValidator {
     }
 
     return [...new Set(fields)];
+  }
+
+  private parseResolution(): 'auto' | '15m' | 'daily' | 'monthly' | undefined {
+    const resolution = (this.queryStringParams?.resolution ?? 'auto').toLowerCase();
+    if (resolution !== 'auto' && resolution !== '15m' && resolution !== 'daily' && resolution !== 'monthly') {
+      this.errorText = 'resolution must be auto, 15m, daily, or monthly';
+      return undefined;
+    }
+
+    return resolution;
   }
 }

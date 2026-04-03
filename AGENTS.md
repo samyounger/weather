@@ -5,6 +5,10 @@
 This repository runs a weather data pipeline built around AWS Lambda, Athena, and S3.
 It ingests Tempest weather observations, stores raw partitioned data, exposes query APIs, and builds refined datasets for analytics.
 
+Architecture reference:
+
+- `ARCHITECTURE.md`
+
 ## High-Level Flow
 
 1. `store-observations` fetches Tempest readings and writes raw JSON to S3 (`year/month/day/hour` partitions).
@@ -13,12 +17,18 @@ It ingests Tempest weather observations, stores raw partitioned data, exposes qu
 4. `backfill-observations` is a one-off Step Functions workflow for historical partition backfill in Athena.
 5. `cloud-computing` provides shared adapters/utilities for AWS services used by other packages.
 
+`fetch-observations` now also owns the dashboard-oriented `/series` endpoint, which can:
+
+- choose `15m`, `daily`, or `monthly` resolution automatically
+- return `202` with a poll URL after a 5-second sync budget
+- reuse in-flight long-range queries through a DynamoDB-backed query registry
+
 ## Workspace Packages
 
 - `packages/cloud-computing`: shared AWS clients and database/storage helpers.
 - `packages/store-observations`: scheduled Lambda ingestion of Tempest observations.
 - `packages/fetch-observations`: API Lambda for querying weather observations.
-- `packages/refine-observations`: scheduled Lambda to build refined Athena outputs.
+- `packages/refine-observations`: scheduled Lambda to build refined Athena outputs, including daily rollups for long-range charts.
 - `packages/backfill-observations`: Step Functions + Lambdas to backfill missing Athena partitions.
 
 ## Common Commands
@@ -61,6 +71,7 @@ Code organization standard:
 - Artifact buckets are package-specific and configured in each package `samconfig.toml`.
 - Region in current package configs is `eu-west-2`.
 - AWS credentials or AWS SSO login are required before deployment.
+- `fetch-observations` now requires a DynamoDB query-registry table from its SAM stack for long-range query deduplication and polling state.
 
 ## Draft Intent
 

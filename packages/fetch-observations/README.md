@@ -1,72 +1,142 @@
 # Fetch Observations Package
 
-Query weather observations from Athena using a bounded date/time range.
+Athena-backed API Lambda for raw queries, refined queries, and long-range chart series queries.
 
 ## Endpoints
 
-- `/observations` (also `/`) queries the raw `observations` table.
-- `/refined` queries the `observations_refined_15m` table.
+- `/observations` or `/` queries the raw `observations` table.
+- `/refined` queries the `observations_refined_15m` table directly.
+- `/series` is the dashboard-focused trend endpoint with automatic resolution selection and async fallback.
 
-## API Query Modes
+## Query Modes
 
-### 1. Sync mode (default)
-Runs the Athena query and returns data in one request.
+### Sync mode
+
+Supported on `/observations`, `/refined`, and `/series`.
 
 Required query params:
-- `from` (ISO-8601 datetime)
-- `to` (ISO-8601 datetime)
 
-Optional query params:
-- `fields` (comma-separated column list)
-- `limit` (max rows, default `100`, max `1000`)
-- `nextToken` (Athena pagination token)
-
-Example:
-```bash
-curl "https://<function-url>/observations?from=2026-02-19T00:00:00Z&to=2026-02-19T01:00:00Z&fields=datetime,winddirection,airtemperature&limit=200"
-```
-
-### 2. Async mode
-Use async mode for longer-running queries.
-
-Start query:
-- `mode=async`
 - `from`
 - `to`
-- optional `fields`, `limit`
 
-```bash
-curl "https://<function-url>/observations?mode=async&from=2026-02-19T00:00:00Z&to=2026-02-19T06:00:00Z&fields=datetime,windavg,windgust"
+Optional query params:
+
+- `fields`
+- `limit`
+- `nextToken`
+
+### Async mode
+
+Supported on:
+
+- `/observations`
+- `/refined`
+- `/series`
+
+For `/observations` and `/refined`, async mode is keyed by `queryExecutionId`.
+
+For `/series`, async mode is keyed by `requestKey`, which is stable for the same user plus normalized request shape.
+
+## `/series` Endpoint
+
+`/series` is the dashboard-facing trend endpoint. It adds:
+
+- automatic resolution selection
+- longer date ranges including custom ranges
+- 5-second synchronous wait budget
+- async polling after timeout
+- request deduplication for identical in-flight queries
+
+### Resolution selection
+
+The backend chooses the cheapest dataset that still returns a useful trend:
+
+- up to `7d` -> `15m`
+- over `7d` up to `18 months` -> `daily`
+- over `18 months` -> `monthly`
+
+`monthly` is produced by aggregating from `observations_refined_daily` at query time.
+
+### Series request flow
+
+```mermaid
+flowchart TD
+  A[Client calls /series] --> B[Normalize request and build requestKey]
+  B --> C{Reusable query record exists?}
+  C -- yes, running --> D[Return 202 with pollUrl]
+  C -- yes, succeeded --> E[Return 200 with cached Athena result read]
+  C -- no --> F[Start Athena query]
+  F --> G[Store RUNNING record in DynamoDB]
+  G --> H{Completes within 5s?}
+  H -- yes --> I[Mark SUCCEEDED and return 200]
+  H -- no --> J[Return 202 with pollUrl]
 ```
 
-Response includes `queryExecutionId` with HTTP `202`.
+### Query registry
 
-Poll query:
-- `mode=async`
+`/series` uses a DynamoDB-backed query registry to track in-flight and completed requests.
+
+Each record stores:
+
+- `requestKey`
 - `queryExecutionId`
-- optional `nextToken`
+- `status`
+- `aggregationLevel`
+- `tableName`
+- `queryString`
+- timestamps and `expiresAt`
+
+This prevents duplicate Athena executions when the same user refreshes the page and resubmits the same trend query.
+
+### Why DynamoDB
+
+The registry used to be S3-backed, which left a read-then-write race window.
+
+DynamoDB now provides:
+
+- atomic conditional create for in-flight deduplication
+- consistent reads for polling state
+- TTL cleanup via `expiresAt`
+
+## `/series` Async Polling Contract
+
+Initial request:
 
 ```bash
-curl "https://<function-url>/observations?mode=async&queryExecutionId=<QUERY_ID>"
+curl "https://<function-url>/series?from=2025-01-01T00:00:00Z&to=2026-01-01T00:00:00Z&fields=period_start,airtemperature_avg,relativehumidity_avg&limit=1000"
 ```
 
-Possible async poll responses:
-- `202` when still running/queued
-- `200` with data when succeeded
-- `500` when failed/cancelled
+If the query exceeds the 5-second wait budget, the API returns `202`:
 
-## Pagination
-Both sync and async result fetches support pagination via `nextToken`.
+```json
+{
+  "status": "PENDING",
+  "requestKey": "abc123",
+  "queryExecutionId": "athena-query-id",
+  "aggregationLevel": "daily",
+  "pollAfterMs": 1000,
+  "pollUrl": "https://.../series?mode=async&requestKey=abc123"
+}
+```
 
-- Read `nextToken` from the response.
-- Pass it back in the next request to continue reading rows.
+Poll request:
+
+```bash
+curl "https://<function-url>/series?mode=async&requestKey=abc123"
+```
+
+Poll responses:
+
+- `202` while still running
+- `200` when ready
+- `500` when Athena failed or was cancelled
+- `404` when the registry record has expired or does not exist
 
 ## Field Selection
-`fields` must be a comma-separated subset of allowed columns for the endpoint you call (`/observations` or `/refined`).
 
-If unsupported fields are provided, request returns `400`.
+`fields` must be a comma-separated subset of allowed columns for the endpoint being called.
 
-### Available Fields
+### Raw endpoint fields
 
 - `deviceid`
 - `datetime`
@@ -96,7 +166,7 @@ If unsupported fields are provided, request returns `400`.
 - `day`
 - `hour`
 
-### Refined Endpoint Fields (`/refined`)
+### Refined and series fields
 
 - `period_start`
 - `winddirection_avg`
@@ -114,25 +184,27 @@ If unsupported fields are provided, request returns `400`.
 - `day`
 - `hour`
 
-## Validation and Limits
+## Validation and limits
 
-- `from` and `to` must be valid ISO-8601 date-time strings.
-- `from` must be earlier than `to`.
-- Maximum range is `7 days`.
-- `limit` must be a positive integer.
-- Maximum `limit` is `1000`.
+- `from` and `to` must be valid ISO-8601 date-time strings
+- `from` must be earlier than `to`
+- `limit` must be a positive integer
+- maximum `limit` is `1000`
+- `/observations` and `/refined` keep tighter bounded-window validation
+- `/series` allows longer windows and chooses aggregation automatically
 
-## Safety Controls
+## Safety controls
 
-- Athena queries run with a dedicated workgroup (`ATHENA_WORKGROUP`) to enforce guardrails.
-- Query polling uses an application timeout (`QUERY_TIMEOUT_MS`, default `25000`).
-- If Lambda is close to timeout, query polling triggers cancellation using a safety buffer (`QUERY_TIMEOUT_SAFETY_BUFFER_MS`, default `5000`).
-- Cancelled queries return a timeout/cancel response instead of hanging until Lambda hard timeout.
+- Athena runs in a dedicated workgroup
+- synchronous query preparation still uses the Lambda timeout safety buffer
+- `/series` only waits up to 5 seconds before switching to async behavior
+- query-registry entries expire automatically via DynamoDB TTL
 
-## Limitations
+## Commands
 
-- Max query window is 7 days; larger windows must be split client-side.
-- Response row count per page is bounded by Athena pagination and the configured `limit`.
-- Async mode requires client-managed polling and retry behavior.
-- If Athena query execution fails/cancels, API returns a server error response.
-- This package exposes both raw (`observations`) and refined (`observations_refined_15m`) query endpoints.
+```sh
+npm run build --workspace=@weather/fetch-observations
+npm run test --workspace=@weather/fetch-observations
+npm run test:coverage --workspace=@weather/fetch-observations
+npm run deploy --workspace=@weather/fetch-observations
+```

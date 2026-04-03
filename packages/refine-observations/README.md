@@ -1,42 +1,66 @@
 # Refine Observations Package
 
+Scheduled Lambda that builds lower-granularity Athena datasets from raw Tempest observations.
 
-This package processes and refines raw weather observation data to improve its quality and usability. It applies data cleaning, transformation, and validation techniques to ensure that the observations are accurate, consistent, and ready for downstream analysis or storage. The package is designed to support robust data pipelines within the weather project.
+## What it produces
 
-## Installation
+- `observations_refined_15m`
+- `observations_refined_daily`
 
-To install the refine-observations package, use the following command:
+These rollups are stored as Parquet in S3 and queried by `fetch-observations` for longer-range dashboard views.
 
-```bash
-pip install refine-observations
+## Why it exists
+
+The raw `observations` table is good for short, high-detail windows, but it becomes slower and more expensive for trend queries across months or years. This package keeps long-range reads cheap by pre-aggregating the data into coarser tables.
+
+## Rollup strategy
+
+- `15m` rollup is used for short-range charts where detail still matters.
+- `daily` rollup is used for longer trend windows where per-observation detail is unnecessary.
+- `monthly` chart views are derived at query time from the daily rollup rather than materialized as a separate table today.
+
+## Processing flow
+
+```mermaid
+flowchart LR
+  A[Raw observations in S3] --> B[Glue table: observations]
+  B --> C[refine-observations Lambda]
+  C --> D[Parquet: observations_refined_15m]
+  C --> E[Parquet: observations_refined_daily]
+  D --> F[Short-range dashboard queries]
+  E --> G[Long-range dashboard queries]
 ```
 
-## Usage
+## Daily behavior
 
-Here is an example of how to use the refine-observations package in your project:
+1. Runs on a schedule and targets the previous UTC day.
+2. Ensures the rollup tables exist.
+3. Checks whether the target partition has already been written.
+4. Skips work when the day is already refined.
+5. Writes fresh aggregates when the partition is missing.
 
-```python
-from refine_observations import Refine
+The job is intentionally idempotent so retries do not duplicate partitions.
 
-# Load your raw data
-raw_data = ...
+## Aggregated metrics
 
-# Create a Refine object
-refiner = Refine(data=raw_data)
+- averages for metrics such as temperature, humidity, pressure, UV, solar radiation, and mean wind
+- `max` for wind gust
+- `sum` for rainfall
+- `sample_count` for data-density visibility
 
-# Apply cleaning and transformation
-refined_data = refiner.clean().transform()
+## Commands
 
-# Validate the refined data
-is_valid = refiner.validate()
-
-# If valid, proceed with analysis or storage
-if is_valid:
-    # ... your code for analysis or storage ...
+```sh
+npm run build --workspace=@weather/refine-observations
+npm run test --workspace=@weather/refine-observations
+npm run test:coverage --workspace=@weather/refine-observations
+npm run deploy --workspace=@weather/refine-observations
 ```
 
-## Features
+## Relationship to query routing
 
-- Data cleaning: Handles missing values, removes duplicates, and corrects inconsistencies.
-- Data transformation: Normalizes data formats, scales numerical values, and encodes categorical variables.
-- Data validation: Ensures data quality by checking against predefined rules and constraints.
+`fetch-observations` automatically routes range queries to the cheapest table that still matches the requested trend detail:
+
+- short range -> `observations_refined_15m`
+- medium and long range -> `observations_refined_daily`
+- very long monthly trend views -> monthly aggregation over `observations_refined_daily`

@@ -33,6 +33,7 @@
   },
   "peerDependencies": {
     "@aws-sdk/client-athena": "*",
+    "@aws-sdk/client-dynamodb": "*",
     "@aws-sdk/client-s3": "*",
     "@aws-sdk/credential-provider-sso": "*",
     "@weather/cloud-computing": "*",
