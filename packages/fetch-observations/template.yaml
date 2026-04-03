@@ -97,6 +97,27 @@ Resources:
             Effect: Allow
             Resource:
               - "*"
+          - Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+            Effect: Allow
+            Resource:
+              - !GetAtt QueryRegistryTable.Arn
+  QueryRegistryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${AWS::StackName}-query-registry"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: requestKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: requestKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
   TempestLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -124,7 +145,7 @@ Resources:
           ATHENA_WORKGROUP: !Ref TempestAthenaWorkGroup
           QUERY_TIMEOUT_MS: "25000"
           QUERY_TIMEOUT_SAFETY_BUFFER_MS: "5000"
-          QUERY_REGISTRY_BUCKET: "weather-tempest-records"
+          QUERY_REGISTRY_TABLE: !Ref QueryRegistryTable
   TempestAthenaWorkGroup:
     Type: AWS::Athena::WorkGroup
     Properties:

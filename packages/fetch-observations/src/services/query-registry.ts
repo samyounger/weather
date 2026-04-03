@@ -1,10 +1,10 @@
 import {
-  GetObjectCommand,
-  GetObjectCommandOutput,
-  NoSuchKey,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3';
+  ConditionalCheckFailedException,
+  DynamoDBClient,
+  GetItemCommand,
+  PutItemCommand,
+  UpdateItemCommand,
+} from '@aws-sdk/client-dynamodb';
 
 export type QueryRegistryStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 
@@ -22,98 +22,107 @@ export type QueryRegistryRecord = {
 };
 
 const REGION = 'eu-west-2';
-const REGISTRY_PREFIX = 'query-registry';
 
-const toBodyString = async (body: NonNullable<GetObjectCommandOutput['Body']>) => {
-  if (typeof body.transformToString === 'function') {
-    return await body.transformToString();
+const toItem = (record: QueryRegistryRecord) => ({
+  requestKey: { S: record.requestKey },
+  userKey: { S: record.userKey },
+  queryExecutionId: { S: record.queryExecutionId },
+  status: { S: record.status },
+  aggregationLevel: { S: record.aggregationLevel },
+  tableName: { S: record.tableName },
+  queryString: { S: record.queryString },
+  createdAt: { S: record.createdAt },
+  updatedAt: { S: record.updatedAt },
+  expiresAt: { N: String(record.expiresAt) },
+});
+
+const fromItem = (item: Record<string, { S?: string; N?: string }>): QueryRegistryRecord | null => {
+  const requestKey = item.requestKey?.S;
+  const userKey = item.userKey?.S;
+  const queryExecutionId = item.queryExecutionId?.S;
+  const status = item.status?.S as QueryRegistryStatus | undefined;
+  const aggregationLevel = item.aggregationLevel?.S as QueryRegistryRecord['aggregationLevel'] | undefined;
+  const tableName = item.tableName?.S;
+  const queryString = item.queryString?.S;
+  const createdAt = item.createdAt?.S;
+  const updatedAt = item.updatedAt?.S;
+  const expiresAt = item.expiresAt?.N ? Number(item.expiresAt.N) : undefined;
+
+  if (
+    !requestKey
+    || !userKey
+    || !queryExecutionId
+    || !status
+    || !aggregationLevel
+    || !tableName
+    || !queryString
+    || !createdAt
+    || !updatedAt
+    || expiresAt === undefined
+    || Number.isNaN(expiresAt)
+  ) {
+    return null;
   }
 
-  return '';
+  return {
+    requestKey,
+    userKey,
+    queryExecutionId,
+    status,
+    aggregationLevel,
+    tableName,
+    queryString,
+    createdAt,
+    updatedAt,
+    expiresAt,
+  };
 };
 
 export class QueryRegistry {
   public constructor(
-    private readonly bucketName = process.env.QUERY_REGISTRY_BUCKET ?? 'weather-tempest-records',
-    private readonly client = new S3Client({ region: REGION }),
+    private readonly tableName = process.env.QUERY_REGISTRY_TABLE ?? 'tempest-fetch-observations-query-registry',
+    private readonly client = new DynamoDBClient({ region: REGION }),
   ) {}
 
   public async get(requestKey: string, options?: { includeExpired?: boolean }): Promise<QueryRegistryRecord | null> {
-    try {
-      const response = await this.client.send(new GetObjectCommand({
-        Bucket: this.bucketName,
-        Key: this.keyFor(requestKey),
-      }));
+    const response = await this.client.send(new GetItemCommand({
+      TableName: this.tableName,
+      Key: {
+        requestKey: { S: requestKey },
+      },
+      ConsistentRead: true,
+    }));
 
-      if (!response.Body) {
-        return null;
-      }
-
-      const body = await toBodyString(response.Body);
-      if (!body) {
-        return null;
-      }
-
-      const record = JSON.parse(body) as QueryRegistryRecord;
-      if (!options?.includeExpired && this.isExpired(record)) {
-        return null;
-      }
-
-      return record;
-    } catch (error) {
-      if (error instanceof NoSuchKey || (error as { name?: string }).name === 'NoSuchKey') {
-        return null;
-      }
-
-      throw error;
+    if (!response.Item) {
+      return null;
     }
+
+    const record = fromItem(response.Item);
+    if (!record) {
+      return null;
+    }
+
+    if (!options?.includeExpired && this.isExpired(record)) {
+      return null;
+    }
+
+    return record;
   }
 
   public async create(record: QueryRegistryRecord): Promise<boolean> {
-    const existing = await this.get(record.requestKey, { includeExpired: true });
-    if (existing && !this.isExpired(existing)) {
-      return false;
-    }
-
-    if (!existing) {
-      const created = await this.put(record, { onlyIfMissing: true });
-      if (!created) {
-        return false;
-      }
-
-      return true;
-    }
-
-    await this.put(record);
-    return true;
-  }
-
-  public async update(record: Pick<QueryRegistryRecord, 'requestKey' | 'status' | 'updatedAt' | 'expiresAt'>): Promise<void> {
-    const existing = await this.get(record.requestKey);
-    if (!existing) {
-      return;
-    }
-
-    await this.put({
-      ...existing,
-      status: record.status,
-      updatedAt: record.updatedAt,
-      expiresAt: record.expiresAt,
-    });
-  }
-
-  private async put(record: QueryRegistryRecord, options?: { onlyIfMissing?: boolean }): Promise<boolean> {
     try {
-      await this.client.send(new PutObjectCommand({
-        Bucket: this.bucketName,
-        Key: this.keyFor(record.requestKey),
-        Body: JSON.stringify(record),
-        ContentType: 'application/json',
-        IfNoneMatch: options?.onlyIfMissing ? '*' : undefined,
+      await this.client.send(new PutItemCommand({
+        TableName: this.tableName,
+        Item: toItem(record),
+        ConditionExpression: 'attribute_not_exists(requestKey) OR expiresAt <= :now',
+        ExpressionAttributeValues: {
+          ':now': { N: String(Math.floor(Date.now() / 1000)) },
+        },
       }));
+
       return true;
     } catch (error) {
-      if (options?.onlyIfMissing && (error as { name?: string }).name === 'PreconditionFailed') {
+      if (error instanceof ConditionalCheckFailedException || (error as { name?: string }).name === 'ConditionalCheckFailedException') {
         return false;
       }
 
@@ -121,8 +130,31 @@ export class QueryRegistry {
     }
   }
 
-  private keyFor(requestKey: string) {
-    return `${REGISTRY_PREFIX}/${requestKey}.json`;
+  public async update(record: Pick<QueryRegistryRecord, 'requestKey' | 'status' | 'updatedAt' | 'expiresAt'>): Promise<void> {
+    try {
+      await this.client.send(new UpdateItemCommand({
+        TableName: this.tableName,
+        Key: {
+          requestKey: { S: record.requestKey },
+        },
+        ConditionExpression: 'attribute_exists(requestKey)',
+        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt, expiresAt = :expiresAt',
+        ExpressionAttributeNames: {
+          '#status': 'status',
+        },
+        ExpressionAttributeValues: {
+          ':status': { S: record.status },
+          ':updatedAt': { S: record.updatedAt },
+          ':expiresAt': { N: String(record.expiresAt) },
+        },
+      }));
+    } catch (error) {
+      if (error instanceof ConditionalCheckFailedException || (error as { name?: string }).name === 'ConditionalCheckFailedException') {
+        return;
+      }
+
+      throw error;
+    }
   }
 
   private isExpired(record: Pick<QueryRegistryRecord, 'expiresAt'>) {

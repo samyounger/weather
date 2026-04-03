@@ -1,4 +1,4 @@
-import { NoSuchKey } from '@aws-sdk/client-s3';
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import { QueryRegistry } from './query-registry';
 
 describe('QueryRegistry', () => {
@@ -21,168 +21,155 @@ describe('QueryRegistry', () => {
     send.mockReset();
   });
 
-  it('returns null when the object body is missing', async () => {
+  it('returns null when the item is missing', async () => {
     send.mockResolvedValueOnce({});
 
-    const subject = await new QueryRegistry('bucket-name', client).get('request-1');
+    const subject = await new QueryRegistry('table-name', client).get('request-1');
 
     expect(subject).toBeNull();
   });
 
-  it('reads a record from S3', async () => {
+  it('reads a record from DynamoDB', async () => {
     send.mockResolvedValueOnce({
-      Body: {
-        transformToString: async () => JSON.stringify(record),
+      Item: {
+        requestKey: { S: record.requestKey },
+        userKey: { S: record.userKey },
+        queryExecutionId: { S: record.queryExecutionId },
+        status: { S: record.status },
+        aggregationLevel: { S: record.aggregationLevel },
+        tableName: { S: record.tableName },
+        queryString: { S: record.queryString },
+        createdAt: { S: record.createdAt },
+        updatedAt: { S: record.updatedAt },
+        expiresAt: { N: String(record.expiresAt) },
       },
     });
 
-    const subject = await new QueryRegistry('bucket-name', client).get('request-1');
+    const subject = await new QueryRegistry('table-name', client).get('request-1');
 
     expect(subject).toEqual(record);
   });
 
-  it('returns null for expired records by default', async () => {
+  it('returns null for malformed items', async () => {
     send.mockResolvedValueOnce({
-      Body: {
-        transformToString: async () => JSON.stringify({
-          ...record,
-          expiresAt: Math.floor(Date.now() / 1000) - 10,
-        }),
+      Item: {
+        requestKey: { S: record.requestKey },
       },
     });
 
-    const subject = await new QueryRegistry('bucket-name', client).get('request-1');
+    const subject = await new QueryRegistry('table-name', client).get('request-1');
+
+    expect(subject).toBeNull();
+  });
+
+  it('returns null for expired records by default', async () => {
+    send.mockResolvedValueOnce({
+      Item: {
+        requestKey: { S: record.requestKey },
+        userKey: { S: record.userKey },
+        queryExecutionId: { S: record.queryExecutionId },
+        status: { S: record.status },
+        aggregationLevel: { S: record.aggregationLevel },
+        tableName: { S: record.tableName },
+        queryString: { S: record.queryString },
+        createdAt: { S: record.createdAt },
+        updatedAt: { S: record.updatedAt },
+        expiresAt: { N: String(Math.floor(Date.now() / 1000) - 10) },
+      },
+    });
+
+    const subject = await new QueryRegistry('table-name', client).get('request-1');
 
     expect(subject).toBeNull();
   });
 
   it('can read expired records when explicitly requested', async () => {
-    const expiredRecord = {
-      ...record,
-      expiresAt: Math.floor(Date.now() / 1000) - 10,
-    };
+    const expiredAt = Math.floor(Date.now() / 1000) - 10;
     send.mockResolvedValueOnce({
-      Body: {
-        transformToString: async () => JSON.stringify(expiredRecord),
+      Item: {
+        requestKey: { S: record.requestKey },
+        userKey: { S: record.userKey },
+        queryExecutionId: { S: record.queryExecutionId },
+        status: { S: record.status },
+        aggregationLevel: { S: record.aggregationLevel },
+        tableName: { S: record.tableName },
+        queryString: { S: record.queryString },
+        createdAt: { S: record.createdAt },
+        updatedAt: { S: record.updatedAt },
+        expiresAt: { N: String(expiredAt) },
       },
     });
 
-    const subject = await new QueryRegistry('bucket-name', client).get('request-1', { includeExpired: true });
+    const subject = await new QueryRegistry('table-name', client).get('request-1', { includeExpired: true });
 
-    expect(subject).toEqual(expiredRecord);
+    expect(subject).toEqual({
+      ...record,
+      expiresAt: expiredAt,
+    });
   });
 
-  it('returns null when the key does not exist', async () => {
-    const error = new NoSuchKey({ $metadata: {}, message: 'missing' });
-    send.mockRejectedValueOnce(error);
+  it('creates a new record when the conditional put succeeds', async () => {
+    send.mockResolvedValueOnce({});
 
-    const subject = await new QueryRegistry('bucket-name', client).get('request-1');
+    const subject = await new QueryRegistry('table-name', client).create(record);
 
-    expect(subject).toBeNull();
+    expect(subject).toBe(true);
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
-  it('rethrows unexpected S3 errors', async () => {
-    send.mockRejectedValueOnce(new Error('boom'));
+  it('returns false from create when a non-expired record already exists', async () => {
+    send.mockRejectedValueOnce(new ConditionalCheckFailedException({ $metadata: {}, message: 'exists' }));
 
-    await expect(new QueryRegistry('bucket-name', client).get('request-1')).rejects.toThrow('boom');
+    const subject = await new QueryRegistry('table-name', client).create(record);
+
+    expect(subject).toBe(false);
   });
 
-  it('uses the default bucket name when one is not provided', async () => {
-    send.mockRejectedValueOnce(Object.assign(new Error('missing'), { name: 'NoSuchKey' }));
+  it('returns false from create when a concurrent writer wins the put', async () => {
+    send.mockRejectedValueOnce(Object.assign(new Error('exists'), { name: 'ConditionalCheckFailedException' }));
+
+    const subject = await new QueryRegistry('table-name', client).create(record);
+
+    expect(subject).toBe(false);
+  });
+
+  it('updates an existing record', async () => {
+    send.mockResolvedValueOnce({});
+
+    await new QueryRegistry('table-name', client).update({
+      requestKey: 'request-1',
+      status: 'SUCCEEDED',
+      updatedAt: '2026-04-03T13:00:00.000Z',
+      expiresAt: Math.floor(Date.now() / 1000) + 7200,
+    });
+
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips update when there is no existing record', async () => {
+    send.mockRejectedValueOnce(new ConditionalCheckFailedException({ $metadata: {}, message: 'missing' }));
+
+    await new QueryRegistry('table-name', client).update({
+      requestKey: 'request-1',
+      status: 'SUCCEEDED',
+      updatedAt: '2026-04-03T13:00:00.000Z',
+      expiresAt: Math.floor(Date.now() / 1000) + 7200,
+    });
+
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the default table name when one is not provided', async () => {
+    send.mockResolvedValueOnce({});
 
     const subject = await new QueryRegistry(undefined, client).get('request-1');
 
     expect(subject).toBeNull();
   });
 
-  it('returns null when the object body cannot be transformed into text', async () => {
-    send.mockResolvedValueOnce({
-      Body: {},
-    });
+  it('rethrows unexpected DynamoDB errors', async () => {
+    send.mockRejectedValueOnce(new Error('boom'));
 
-    const subject = await new QueryRegistry('bucket-name', client).get('request-1');
-
-    expect(subject).toBeNull();
-  });
-
-  it('creates a new record when one does not exist', async () => {
-    send.mockRejectedValueOnce(Object.assign(new Error('missing'), { name: 'NoSuchKey' }))
-      .mockResolvedValueOnce({});
-
-    const subject = await new QueryRegistry('bucket-name', client).create(record);
-
-    expect(subject).toBe(true);
-    expect(send).toHaveBeenCalledTimes(2);
-  });
-
-  it('returns false from create when the record already exists', async () => {
-    send.mockResolvedValueOnce({
-      Body: {
-        transformToString: async () => JSON.stringify(record),
-      },
-    });
-
-    const subject = await new QueryRegistry('bucket-name', client).create(record);
-
-    expect(subject).toBe(false);
-    expect(send).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns false from create when a concurrent writer wins the conditional put', async () => {
-    send.mockRejectedValueOnce(Object.assign(new Error('missing'), { name: 'NoSuchKey' }))
-      .mockRejectedValueOnce(Object.assign(new Error('precondition failed'), { name: 'PreconditionFailed' }));
-
-    const subject = await new QueryRegistry('bucket-name', client).create(record);
-
-    expect(subject).toBe(false);
-    expect(send).toHaveBeenCalledTimes(2);
-  });
-
-  it('replaces an expired record during create', async () => {
-    send.mockResolvedValueOnce({
-      Body: {
-        transformToString: async () => JSON.stringify({
-          ...record,
-          expiresAt: Math.floor(Date.now() / 1000) - 10,
-        }),
-      },
-    }).mockResolvedValueOnce({});
-
-    const subject = await new QueryRegistry('bucket-name', client).create(record);
-
-    expect(subject).toBe(true);
-    expect(send).toHaveBeenCalledTimes(2);
-  });
-
-  it('updates an existing record', async () => {
-    send
-      .mockResolvedValueOnce({
-        Body: {
-          transformToString: async () => JSON.stringify(record),
-        },
-      })
-      .mockResolvedValueOnce({});
-
-    await new QueryRegistry('bucket-name', client).update({
-      requestKey: 'request-1',
-      status: 'SUCCEEDED',
-      updatedAt: '2026-04-03T13:00:00.000Z',
-      expiresAt: 67890,
-    });
-
-    expect(send).toHaveBeenCalledTimes(2);
-  });
-
-  it('skips update when there is no existing record', async () => {
-    send.mockRejectedValueOnce(Object.assign(new Error('missing'), { name: 'NoSuchKey' }));
-
-    await new QueryRegistry('bucket-name', client).update({
-      requestKey: 'request-1',
-      status: 'SUCCEEDED',
-      updatedAt: '2026-04-03T13:00:00.000Z',
-      expiresAt: 67890,
-    });
-
-    expect(send).toHaveBeenCalledTimes(1);
+    await expect(new QueryRegistry('table-name', client).get('request-1')).rejects.toThrow('boom');
   });
 });
