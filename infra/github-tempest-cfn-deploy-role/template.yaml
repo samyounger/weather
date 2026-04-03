@@ -204,6 +204,8 @@ Resources:
               - apigateway:PATCH
               - apigateway:DELETE
               - apigateway:PUT
+              - apigateway:TagResource
+              - apigateway:UntagResource
             Resource:
               - !Sub arn:aws:apigateway:${ArtifactRegion}::/apis
               - !Sub arn:aws:apigateway:${ArtifactRegion}::/apis/*
