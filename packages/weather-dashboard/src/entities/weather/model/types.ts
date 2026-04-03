@@ -7,6 +7,7 @@ export type WeatherFieldOption = {
   key: string;
   label: string;
   color: string;
+  unitLabel: string;
 };
 
 export type WeatherQueryParams = {

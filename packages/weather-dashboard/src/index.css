@@ -152,6 +152,40 @@ a {
   margin-top: 20px;
 }
 
+.summary-table-wrap {
+  margin-top: 24px;
+  overflow-x: auto;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 420px;
+}
+
+.summary-table caption {
+  margin-bottom: 12px;
+  color: #56708d;
+  font-weight: 600;
+  text-align: left;
+}
+
+.summary-table th,
+.summary-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(22, 50, 79, 0.1);
+  text-align: left;
+}
+
+.summary-table thead th {
+  color: #56708d;
+  font-size: 0.95rem;
+}
+
+.summary-table tbody th {
+  font-weight: 600;
+}
+
 .chart-loading {
   position: absolute;
   inset: 0;
@@ -244,5 +278,9 @@ a {
   .chart-container {
     height: 280px;
     margin-top: 16px;
+  }
+
+  .summary-table {
+    min-width: 0;
   }
 }
