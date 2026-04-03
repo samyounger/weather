@@ -1,4 +1,10 @@
-import { GetObjectCommand, GetObjectCommandOutput, NoSuchKey, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  GetObjectCommand,
+  GetObjectCommandOutput,
+  NoSuchKey,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 
 export type QueryRegistryStatus = 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 
@@ -32,7 +38,7 @@ export class QueryRegistry {
     private readonly client = new S3Client({ region: REGION }),
   ) {}
 
-  public async get(requestKey: string): Promise<QueryRegistryRecord | null> {
+  public async get(requestKey: string, options?: { includeExpired?: boolean }): Promise<QueryRegistryRecord | null> {
     try {
       const response = await this.client.send(new GetObjectCommand({
         Bucket: this.bucketName,
@@ -48,7 +54,12 @@ export class QueryRegistry {
         return null;
       }
 
-      return JSON.parse(body) as QueryRegistryRecord;
+      const record = JSON.parse(body) as QueryRegistryRecord;
+      if (!options?.includeExpired && this.isExpired(record)) {
+        return null;
+      }
+
+      return record;
     } catch (error) {
       if (error instanceof NoSuchKey || (error as { name?: string }).name === 'NoSuchKey') {
         return null;
@@ -59,9 +70,18 @@ export class QueryRegistry {
   }
 
   public async create(record: QueryRegistryRecord): Promise<boolean> {
-    const existing = await this.get(record.requestKey);
-    if (existing) {
+    const existing = await this.get(record.requestKey, { includeExpired: true });
+    if (existing && !this.isExpired(existing)) {
       return false;
+    }
+
+    if (!existing) {
+      const created = await this.put(record, { onlyIfMissing: true });
+      if (!created) {
+        return false;
+      }
+
+      return true;
     }
 
     await this.put(record);
@@ -82,16 +102,30 @@ export class QueryRegistry {
     });
   }
 
-  private async put(record: QueryRegistryRecord): Promise<void> {
-    await this.client.send(new PutObjectCommand({
-      Bucket: this.bucketName,
-      Key: this.keyFor(record.requestKey),
-      Body: JSON.stringify(record),
-      ContentType: 'application/json',
-    }));
+  private async put(record: QueryRegistryRecord, options?: { onlyIfMissing?: boolean }): Promise<boolean> {
+    try {
+      await this.client.send(new PutObjectCommand({
+        Bucket: this.bucketName,
+        Key: this.keyFor(record.requestKey),
+        Body: JSON.stringify(record),
+        ContentType: 'application/json',
+        IfNoneMatch: options?.onlyIfMissing ? '*' : undefined,
+      }));
+      return true;
+    } catch (error) {
+      if (options?.onlyIfMissing && (error as { name?: string }).name === 'PreconditionFailed') {
+        return false;
+      }
+
+      throw error;
+    }
   }
 
   private keyFor(requestKey: string) {
     return `${REGISTRY_PREFIX}/${requestKey}.json`;
+  }
+
+  private isExpired(record: Pick<QueryRegistryRecord, 'expiresAt'>) {
+    return record.expiresAt <= Math.floor(Date.now() / 1000);
   }
 }

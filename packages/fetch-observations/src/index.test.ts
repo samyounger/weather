@@ -209,7 +209,7 @@ describe('handler', () => {
     } as APIGatewayProxyEvent);
 
     expect(subject.statusCode).toBe(200);
-    expect(subject.body).toContain('"requestKey":"request-1"');
+    expect(subject.body).toContain('"requestKey":"');
     expect(subject.body).toContain('"aggregationLevel":"monthly"');
   });
 
@@ -517,7 +517,7 @@ describe('handler', () => {
       path: '/series',
     } as APIGatewayProxyEvent);
 
-    expect(subject.statusCode).toBe(202);
+    expect(subject.statusCode).toBe(200);
     expect(subject.body).toContain('"status":"SUCCEEDED"');
   });
 

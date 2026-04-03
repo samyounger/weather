@@ -1,4 +1,4 @@
-export type { WeatherDataset, WeatherFieldOption, WeatherQueryParams, WeatherSeriesResponse } from './model/types';
+export type { WeatherDataset, WeatherFieldOption, WeatherQueryParams, WeatherRow, WeatherSeriesResponse } from './model/types';
 export type { WeatherAggregationLevel, WeatherRangePreset } from './model/types';
 export { datasetFieldOptions } from './model/field-options';
 export { buildWeatherQueryParams } from './model/query';
