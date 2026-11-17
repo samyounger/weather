@@ -16,6 +16,8 @@ jobs:
   prepare-release:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       merge_sha: ${{ steps.meta.outputs.merge_sha }}
       bump: ${{ steps.bump.outputs.bump }}
@@ -39,7 +41,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.merge_commit_sha }}
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Capture merge metadata
         id: meta
@@ -85,16 +87,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-      - name: Configure remote for tag push trigger token
-        env:
-          TAG_PUSH_TOKEN: ${{ secrets.TAG_PUSH_TOKEN }}
-        run: |
-          if [ -z "${TAG_PUSH_TOKEN:-}" ]; then
-            echo "Repository secret TAG_PUSH_TOKEN must be set to a PAT or GitHub App token with repo contents:write."
-            exit 1
-          fi
-          git remote set-url origin "https://x-access-token:${TAG_PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
       - name: Create and push package tags
         id: tags

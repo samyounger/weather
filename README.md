@@ -33,8 +33,9 @@ Deployments are tag-driven.
    - `pkg/weather-dashboard/vX.Y.Z`
    - `pkg/cloud-computing/vX.Y.Z`
    - `pkg/github-tempest-cfn-deploy-role/vX.Y.Z` (IAM deploy-role policy stack)
-4. Tag push triggers `.github/workflows/deploy-from-package-tag.yml`.
-5. The tag deploy workflow:
+4. The workflow pushes the tags with the job's `GITHUB_TOKEN`.
+5. The same workflow:
+   - runs tests for the affected packages
    - creates a GitHub Deployment record per environment
    - runs the package deployment via reusable workflows
    - updates deployment status to `success` or `failure`
