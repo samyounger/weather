@@ -752,3 +752,14 @@ describe('handler', () => {
     await expect(handler(syncEvent, mockContext)).rejects.toThrow('boom');
   });
 });
+
+
+jest.mock('./services/storm-handler', () => ({
+  handleStorm: jest.fn().mockResolvedValue({ statusCode: 200, body: '{"id":"eowyn"}' }),
+}));
+
+it('routes the fixed storm case before generic query validation', async () => {
+  const result = await handler({ ...syncEvent, rawPath: '/storms/eowyn', queryStringParameters: null } as unknown as APIGatewayProxyEvent, mockContext);
+  expect(result.statusCode).toBe(200);
+  expect(JSON.parse(result.body).id).toBe('eowyn');
+});
