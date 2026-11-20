@@ -44,6 +44,7 @@ const check = async (label, task) => { await task(); count++; console.log(`PASS 
     }
     if (!ready) throw new Error('Test Vite server did not become ready');
   }
+  fs.mkdirSync('.tools/storm-browser', { recursive: true });
   for (const [name, engine] of [['chromium', chromium], ['webkit', webkit]]) {
     const browser = await engine.launch({ headless: true });
     try {
@@ -91,9 +92,49 @@ const check = async (label, task) => { await task(); count++; console.log(`PASS 
           throw new Error('Could not reach with Tab: ' + text);
         };
         await page.route('**/test-api/series?*', (route) => route.fulfill({ json: { data: [], aggregationLevel: '15m' } }));
+        let liveMode = 'success';
+        let liveRequests = 0;
+        await page.route('**/test-api/live', (route) => {
+          liveRequests++;
+          assert.equal(route.request().headers().authorization, 'Bearer synthetic-jwt');
+          if (liveMode === 'error') return route.fulfill({ status: 503, json: {} });
+          if (liveMode === 'invalid') return route.fulfill({ json: {} });
+          return route.fulfill({ json: {
+            observedAt: new Date(Date.now() - (liveMode === 'stale' ? 600000 : 10000)).toISOString(),
+            retrievedAt: new Date().toISOString(), temperatureC: liveMode === 'missing' ? null : 8.5,
+            humidityPct: 76, windMph: 12.3, gustMph: 20.1, windDirectionDeg: 180,
+            pressureHpa: 1000, rainMm: 0, reportIntervalMinutes: 1, source: 'Synthetic station fixture',
+          } });
+        });
         const prefix = `${name} ${width}px`;
+        await check(prefix + ' live landing, manual refresh and responsive layout', async () => {
+          await page.goto(base);
+          await page.getByRole('heading', { name: 'Live weather at Huntshaw' }).waitFor();
+          await page.getByText('8.5 °C', { exact: true }).waitFor();
+          assert.equal(await page.getByRole('button', { name: 'Live weather', exact: true }).getAttribute('aria-pressed'), 'true');
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+          const before = liveRequests;
+          await Promise.all([page.waitForResponse((r) => r.url().endsWith('/test-api/live')), page.getByRole('button', { name: 'Refresh now' }).click()]);
+          await page.waitForFunction(() => document.body.innerText.includes('Observed less than a minute ago'));
+          assert.ok(liveRequests > before);
+          await page.screenshot({ path: `.tools/storm-browser/live-${name}-${width}.png` });
+        });
+        await check(prefix + ' delayed observations, missing values, error preservation and recovery', async () => {
+          liveMode = 'stale'; await page.getByRole('button', { name: 'Refresh now' }).click();
+          await page.getByText(/Station data is delayed/).waitFor();
+          liveMode = 'missing'; await page.getByRole('button', { name: 'Refresh now' }).click();
+          await page.getByText('Unavailable', { exact: true }).waitFor();
+          liveMode = 'error'; await page.getByRole('button', { name: 'Refresh now' }).click();
+          await page.getByRole('alert').waitFor();
+          assert.match(await page.getByRole('alert').innerText(), /last successful reading/);
+          liveMode = 'success'; await page.getByRole('button', { name: 'Refresh now' }).click();
+          await page.getByText('8.5 °C', { exact: true }).waitFor();
+          assert.equal(await page.getByRole('alert').count(), 0);
+        });
+
         await check(prefix + ' story and measured local cards', async () => {
           await page.goto(base);
+          await page.getByRole('button', { name: 'Storm story', exact: true }).click();
           await page.getByRole('heading', { name: /Éowyn/ }).waitFor();
           await page.getByText('63.2 mph', { exact: true }).waitFor();
           assert.match(await page.locator('#local-story').innerText(), /98.6% minute coverage/);
@@ -152,7 +193,7 @@ const check = async (label, task) => { await task(); count++; console.log(`PASS 
           assert.equal(await page.getByRole('button', { name: 'Storm story' }).getAttribute('aria-pressed'), 'true');
         });
         await check(prefix + ' recover from upstream failure', async () => {
-          mode = 'error'; await page.reload();
+          mode = 'error'; await page.reload(); await page.getByRole('button', { name: 'Storm story', exact: true }).click();
           await page.getByRole('alert').waitFor();
           assert.match(await page.getByRole('alert').innerText(), /temporarily unavailable/);
           assert.equal(await page.locator('#lifecycle').count(), 1);
@@ -160,31 +201,31 @@ const check = async (label, task) => { await task(); count++; console.log(`PASS 
           await page.getByText('63.2 mph', { exact: true }).waitFor();
         });
         await check(prefix + ' empty history never becomes zero weather', async () => {
-          mode = 'empty'; await page.reload();
+          mode = 'empty'; await page.reload(); await page.getByRole('button', { name: 'Storm story', exact: true }).click();
           await page.getByText('No station reports are available', { exact: false }).waitFor();
           assert.match(await page.locator('#local-story').innerText(), /Unavailable/);
           assert.match(await page.locator('#almanac').innerText(), /Reference unavailable/);
           assert.equal(await page.getByText('0.0 mm', { exact: true }).count(), 0);
         });
         await check(prefix + ' insufficient reference coverage', async () => {
-          mode = 'partial'; await page.reload();
+          mode = 'partial'; await page.reload(); await page.getByRole('button', { name: 'Storm story', exact: true }).click();
           await page.getByText(/Not enough gust coverage/).waitFor();
         });
         await check(prefix + ' reference failure leaves event usable', async () => {
-          mode = 'reference-error'; await page.reload();
+          mode = 'reference-error'; await page.reload(); await page.getByRole('button', { name: 'Storm story', exact: true }).click();
           await page.getByText('63.2 mph', { exact: true }).waitFor();
           assert.match(await page.locator('#almanac').innerText(), /Reference could not be retrieved/);
           mode = 'success'; await tabTo('Retry reference history'); await page.keyboard.press('Space');
           await page.getByText(/38.0 mph higher/).waitFor();
         });
         await check(prefix + ' missing gust metrics are unavailable not zero activity', async () => {
-          mode = 'no-gust'; await page.reload();
+          mode = 'no-gust'; await page.reload(); await page.getByRole('button', { name: 'Storm story', exact: true }).click();
           await page.getByText('No usable gust observations; threshold activity is unavailable, not zero.', { exact: true }).waitFor();
           assert.equal(await page.getByRole('combobox').isDisabled(), true);
           assert.equal(await page.getByText('0 sampled minutes', { exact: false }).count(), 0);
         });
         await check(prefix + ' malformed payload becomes handled retry state', async () => {
-          mode = 'invalid'; await page.reload();
+          mode = 'invalid'; await page.reload(); await page.getByRole('button', { name: 'Storm story', exact: true }).click();
           await page.getByRole('alert').waitFor();
           assert.match(await page.getByRole('alert').innerText(), /not recognised/);
           assert.equal(await page.getByRole('heading', { name: 'Named before it even formed' }).count(), 1);

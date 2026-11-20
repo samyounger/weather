@@ -73,6 +73,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     void hydrate();
   }, [config, configReady]);
 
+  // Keep a visible, long-running PWA session authenticated as live requests continue.
+  useEffect(() => {
+    if (!config || !session?.refreshToken) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const refreshed = await refreshTokens(config, session.refreshToken);
+        if (cancelled) return;
+        const nextSession = { ...refreshed, email: session.email };
+        persistSession(nextSession);
+        setSession(nextSession);
+      } catch {
+        if (!cancelled) { clearStoredSession(); setSession(null); }
+      }
+    }, Math.max(1000, session.expiresAt - Date.now() - 60_000));
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [config, session]);
+
   const value = useMemo<AuthContextValue>(() => ({
     session,
     ready,
