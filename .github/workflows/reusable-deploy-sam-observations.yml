@@ -124,6 +124,15 @@ jobs:
               TempestStationId=$TEMPEST_STATION_ID \
               AlertEmail=$ALERT_EMAIL
 
+      - name: Verify historical weather integration with release configuration
+        if: steps.deploy.outcome == 'success' && inputs.package_workspace == '@weather/fetch-observations'
+        env:
+          TEMPEST_HOST: ${{ vars.TEMPEST_HOST }}
+          TEMPEST_TOKEN: ${{ secrets.TEMPEST_TOKEN }}
+          TEMPEST_DEVICE_ID: ${{ vars.TEMPEST_DEVICE_ID }}
+          TEMPEST_STATION_ID: ${{ vars.TEMPEST_STATION_ID }}
+        run: node scripts/verify-storm-history.cjs
+
       - name: Capture first CloudFormation failure reason
         id: failure-reason
         if: steps.deploy.outcome == 'failure'
