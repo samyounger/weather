@@ -373,3 +373,7 @@ a {
   *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; }
 }
 .storm-cell-coverage { display: block; font-size: .72rem; color: #435e73; white-space: nowrap; margin-top: 4px; }
+
+.live-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 1rem; }
+.live-metrics h2 { font-size: 1rem; }
+.live-value { font-size: 1.8rem; font-weight: 700; margin: 0.5rem 0; }

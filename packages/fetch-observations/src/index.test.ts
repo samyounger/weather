@@ -763,3 +763,12 @@ it('routes the fixed storm case before generic query validation', async () => {
   expect(result.statusCode).toBe(200);
   expect(JSON.parse(result.body).id).toBe('eowyn');
 });
+
+jest.mock('./services/live-handler', () => ({
+  handleLive: jest.fn().mockResolvedValue({ statusCode: 200, body: '{"source":"live"}' }),
+}));
+it('routes live observations before archive query validation', async () => {
+  const result = await handler({ ...syncEvent, rawPath: '/live', queryStringParameters: null } as unknown as APIGatewayProxyEvent, mockContext);
+  expect(result.statusCode).toBe(200);
+  expect(JSON.parse(result.body).source).toBe('live');
+});

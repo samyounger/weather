@@ -81,7 +81,7 @@ export const DashboardShell = () => {
             <p className="muted">
               {config?.mockMode
                 ? 'Viewing local mock weather data for UI iteration.'
-                : 'Authenticated charts with automatic long-range aggregation.'}
+                : 'Historical archive, updated overnight for the previous day. Open Live weather for current station readings.'}
             </p>
           </div>
           <LogoutButton />

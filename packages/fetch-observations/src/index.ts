@@ -8,6 +8,7 @@ import { handleSeriesQuery } from './services/series-query-handler';
 import { handleSyncQuery } from './services/sync-query-handler';
 import { getQueryTargetFromPath } from './services/query-target';
 import { handleStorm } from './services/storm-handler';
+import { handleLive } from './services/live-handler';
 
 dotEnv.config({ path: '../../.env' });
 
@@ -15,6 +16,7 @@ const queryTargetError = 'Unsupported endpoint. Use /observations, /refined, or 
 
 export const handler = async (event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> => {
   const endpointPath = (event as APIGatewayProxyEvent & { rawPath?: string }).rawPath ?? event.path;
+  if (endpointPath === '/live') return handleLive();
   if (endpointPath === '/storms/eowyn') {
     return handleStorm();
   }

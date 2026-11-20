@@ -134,8 +134,11 @@ jobs:
         run: |
           if [ -f packages/fetch-observations/function/services/storm-handler.js ]; then
             node scripts/verify-storm-history.cjs
+          fi
+          if [ -f packages/fetch-observations/function/services/live-handler.js ]; then
+            node scripts/verify-live-weather.cjs
           else
-            echo "This older release has no historical case endpoint; smoke not applicable."
+            echo "This older release has no live endpoint; live smoke not applicable."
           fi
 
       - name: Capture first CloudFormation failure reason
