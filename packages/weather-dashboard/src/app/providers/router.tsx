@@ -1,10 +1,11 @@
+import type { ReactElement } from 'react';
 import { Navigate, RouterProvider, createBrowserRouter } from 'react-router-dom';
 import { DashboardPage } from '../../pages/dashboard-page';
 import { LoginPage } from '../../pages/login-page';
 import { useAuth } from './auth-provider';
 import { useRuntimeConfig } from './runtime-config-provider';
 
-const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
+const ProtectedRoute = ({ children }: { children: ReactElement }) => {
   const { session, ready } = useAuth();
   const { error, ready: configReady } = useRuntimeConfig();
 

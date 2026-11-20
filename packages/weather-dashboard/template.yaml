@@ -155,6 +155,15 @@ Resources:
       AuthorizationType: JWT
       AuthorizerId: !Ref DashboardHttpApiAuthorizer
 
+  DashboardStormRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DashboardHttpApi
+      RouteKey: GET /storms/eowyn
+      Target: !Sub "integrations/${DashboardLambdaIntegration}"
+      AuthorizationType: JWT
+      AuthorizerId: !Ref DashboardHttpApiAuthorizer
+
   DashboardHttpApiStage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:

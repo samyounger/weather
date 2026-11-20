@@ -303,3 +303,73 @@ a {
     min-width: 0;
   }
 }
+
+/* Story-first observatory; existing trend and auth components retain their styling. */
+:focus-visible { outline: 3px solid #9a451f; outline-offset: 4px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.skip-link { position: fixed; top: -100px; left: 16px; z-index: 10; padding: 12px; background: white; }
+.skip-link:focus { top: 12px; }
+.weather-navigation { max-width: 1120px; margin: 0 auto 24px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.weather-brand { font-family: Georgia, serif; font-size: 1.8rem; font-weight: 700; }
+.weather-brand span { display: block; font-family: "Avenir Next", "Segoe UI", sans-serif; font-size: .75rem; text-transform: uppercase; letter-spacing: .13em; color: #435e73; }
+.storm-story { line-height: 1.65; }
+.storm-story h2 { font-family: Georgia, serif; font-size: clamp(1.6rem, 3vw, 2.1rem); line-height: 1.2; margin: 0 0 18px; }
+.storm-story h3 { font-size: 1.05rem; line-height: 1.4; margin: 0 0 8px; }
+.storm-story a { text-underline-offset: 4px; text-decoration-thickness: 1px; }
+.storm-cover { padding: clamp(24px, 5vw, 56px); background: linear-gradient(130deg, #f7f2e7, #eef3f4); overflow: hidden; }
+.storm-cover h1 { font-family: Georgia, serif; font-size: clamp(3rem, 7vw, 5.2rem); font-weight: 400; line-height: 1.07; letter-spacing: -.045em; margin: 16px 0 26px; }
+.storm-cover h1 span { font-size: .67em; letter-spacing: -.035em; }
+.storm-eyebrow { text-transform: uppercase; font-size: .73rem; letter-spacing: .13em; font-weight: 750; color: #814222; margin: 0 0 10px; }
+.storm-date { margin-top: 30px; color: #435e73; font-size: .9rem; }
+.storm-intro { max-width: 690px; font-size: 1.12rem; }
+.storm-jump-links { display: flex; flex-wrap: wrap; gap: 10px 24px; margin: 28px 0; }
+.storm-jump-links a { padding: 8px 0; font-weight: 650; }
+.storm-section { padding: clamp(22px, 4vw, 42px); scroll-margin-top: 16px; min-width: 0; }
+.storm-section > p { max-width: 850px; }
+.storm-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 28px 0 16px; gap: 18px; }
+.storm-metric { border-top: 2px solid #d3bda6; padding-top: 16px; }
+.storm-metric dt { font-size: .82rem; color: #435e73; }
+.storm-metric dd { margin: 8px 0; font-family: Georgia, serif; font-size: clamp(1.4rem, 2.7vw, 2rem); line-height: 1.2; }
+.storm-metric p { font-size: .79rem; line-height: 1.5; color: #435e73; }
+.storm-journey { margin: 30px 0; background: #edf3f4; padding: 20px 10px; border-radius: 16px; }
+.storm-journey svg { width: 100%; height: auto; display: block; }
+.storm-journey figcaption { padding: 16px 12px 0; font-size: .8rem; color: #435e73; }
+.storm-timeline { list-style: none; padding: 0 0 0 22px; border-left: 2px solid #d3bda6; margin: 36px 0 0 7px; }
+.storm-timeline li { position: relative; padding: 0 0 30px 16px; }
+.storm-timeline li:last-child { padding-bottom: 0; }
+.storm-timeline li::before { content: ''; position: absolute; left: -30px; top: 5px; width: 12px; height: 12px; border-radius: 50%; background: #814222; border: 2px solid #f9f6ed; }
+.storm-timeline p { margin: 0 0 10px; max-width: 750px; }
+.storm-timeline a { font-size: .85rem; }
+.storm-chart { height: 290px; width: 100%; margin: 30px 0; font-size: .78rem; }
+.storm-threshold { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-weight: 600; }
+.storm-threshold select { padding: 12px 16px; background: white; border: 1px solid #8399a8; border-radius: 8px; }
+.storm-callout { background: #edf3f4; padding: 20px; border-left: 3px solid #8b4b2e; margin: 22px 0; border-radius: 0 10px 10px 0; }
+.storm-callout p { margin-bottom: 0; }
+.storm-story details { border-top: 1px solid #d5dee0; padding: 16px 0; }
+.storm-story summary { cursor: pointer; font-weight: 650; padding: 8px 0; }
+.storm-table-scroll { overflow-x: auto; max-width: 100%; margin-top: 18px; }
+.storm-table-scroll table { min-width: 680px; font-size: .85rem; }
+.storm-evidence-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin: 28px 0; }
+.storm-evidence-grid > div { padding-top: 18px; border-top: 2px solid #d3bda6; }
+.storm-evidence-grid a { font-size: .86rem; }
+.storm-sources { padding-left: 20px; }
+.storm-sources li { margin-bottom: 20px; }
+.storm-sources p { margin: 4px 0; font-size: .82rem; color: #435e73; }
+@media (max-width: 860px) {
+  .storm-metrics { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 540px) {
+  .weather-navigation { align-items: flex-start; flex-direction: column; margin-bottom: 16px; }
+  .weather-navigation .button-row { flex-direction: row; }
+  .storm-cover .hero-actions { flex-direction: row; align-items: flex-start; }
+  .storm-cover .hero-actions button { padding: 10px 14px; white-space: nowrap; }
+  .storm-metrics { gap: 18px 12px; }
+  .storm-evidence-grid { grid-template-columns: 1fr; gap: 18px; }
+  .storm-journey { padding: 16px 0; }
+  .storm-journey svg { min-height: 110px; }
+  .storm-jump-links { gap: 6px 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; scroll-behavior: auto !important; }
+}
+.storm-cell-coverage { display: block; font-size: .72rem; color: #435e73; white-space: nowrap; margin-top: 4px; }

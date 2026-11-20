@@ -13,7 +13,8 @@
     "lint": "eslint .",
     "lint:fix": "npm run lint -- --fix",
     "deploy": "npm run build --workspace=@weather/weather-dashboard && sam build --config-env prod && sam deploy --config-env prod && node ./scripts/publish-static-site.mjs",
-    "deploy:cleanup": "sam delete --config-env prod --no-prompts"
+    "deploy:cleanup": "sam delete --config-env prod --no-prompts",
+    "typecheck": "tsc -p tsconfig.app.json"
   },
   "author": "Sam Younger",
   "license": "ISC",
