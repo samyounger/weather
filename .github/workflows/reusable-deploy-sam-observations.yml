@@ -131,7 +131,12 @@ jobs:
           TEMPEST_TOKEN: ${{ secrets.TEMPEST_TOKEN }}
           TEMPEST_DEVICE_ID: ${{ vars.TEMPEST_DEVICE_ID }}
           TEMPEST_STATION_ID: ${{ vars.TEMPEST_STATION_ID }}
-        run: node scripts/verify-storm-history.cjs
+        run: |
+          if [ -f packages/fetch-observations/function/services/storm-handler.js ]; then
+            node scripts/verify-storm-history.cjs
+          else
+            echo "This older release has no historical case endpoint; smoke not applicable."
+          fi
 
       - name: Capture first CloudFormation failure reason
         id: failure-reason
